@@ -1,0 +1,5 @@
+# The fake targets and the webhook: a plain JDK jar, no Spring Boot, nothing to extract.
+FROM docker.io/library/eclipse-temurin:21.0.12_8-jre-alpine-3.24
+COPY sentinel-fixtures/target/sentinel-fixtures-*.jar /app/fixtures.jar
+WORKDIR /app
+ENTRYPOINT ["java", "-jar", "/app/fixtures.jar"]

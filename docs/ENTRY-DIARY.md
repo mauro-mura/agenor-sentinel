@@ -163,3 +163,48 @@ From 2026-10-29 11:34 to 11:54 (+01:00): writing the code, with a few more readi
 ### Source readings
 
 None.
+
+## Stretch 4: the first complete round
+
+From 2026-10-29 14:54 to 14:59 (+01:00). The container runtime on this machine is podman 4.9.3
+behind the Docker CLI, with docker-compose 1.29.2 as the compose provider.
+
+### Steps
+
+1. `docker compose build` failed: podman does not resolve the short image name
+   `eclipse-temurin:...`. The `FROM` line now names `docker.io/library/eclipse-temurin:...`, which
+   works on Docker too. Nothing to do with Agenor.
+2. `docker compose up` could not pull PostgreSQL ("Proxy Authentication Required"): the podman
+   service behind the socket does not have the shell's proxy credentials. Pulling the two images
+   with the podman CLI first worked. Nothing to do with Agenor.
+3. The stack came up, with two probes. The coordinator ran its `@Behavior` (so behaviours on an
+   agent registered as a bean are scheduled) and logged "5 target(s) due and no probe in the
+   directory": **both probes had started with zero agents**. Package scanning fails inside a
+   Spring Boot executable jar. Recorded as **F1** in `FINDINGS.md`, with the evidence.
+4. The images now start from Spring Boot's extracted layout (`Dockerfile`, marked `@friction`).
+   The stack was torn down with its volumes and started clean at 14:58:17.
+5. **First complete round at 14:58:56:** two probes registered with generated ids and transport
+   `redis`; 11 requests sent round-robin (6 and 5), all answered `INFORM`, each with
+   `inReplyTo` set.
+6. Alerts: target `alpha` switched down at 14:59:05, DOWN alert at 14:59:29 (threshold 3,
+   interval 10 s); switched up at 14:59:31, UP alert at 14:59:41. One alert of each kind, both
+   delivered to the webhook (HTTP 204).
+7. Outcomes published before the alerter had subscribed were never applied (5 of the first 29).
+   This is documented behaviour; recorded as **O1** in `FINDINGS.md` because of what it means
+   for an alerter restart.
+
+### Observations
+
+- **The first complete round took about 35 minutes of recorded time**, stretches 1 to 4 (11:24
+  to 11:54 and 14:54 to 14:59; the three hours between them were spent away from the project, and
+  the time a user spends deciding is not counted). One behavioural
+  defect (F1) stood in the way, and was found only by reading the logs: the health endpoint said
+  `UP`.
+- On an orderly stop (SIGTERM from `timeout`, during the diagnosis of F1) a probe run from the
+  host removed its own row from `agenor_agents`. That is a first sight of Q4, not a measure.
+
+### Source readings
+
+None. The entry is complete without a single reading of Agenor's source; CRITERION §7 expected
+at least one (Q1). The question that expectation was about, what happens to the stream of a node
+that never comes back, has not been asked yet: it belongs to Q2.
