@@ -1,0 +1,11 @@
+#!/bin/sh
+# Assigns every coordinator request its final state (CRITERION §4): answered, dead-lettered,
+# timed out, in flight or lost, and says where the unanswered ones are in Redis.
+#
+#   mvn -DskipTests package && scripts/reconcile [--csv FILE] [--grace SECONDS]
+#
+# Defaults reach the compose stack from the host; JDBC_URL, JDBC_USERNAME, JDBC_PASSWORD,
+# REDIS_URI and KEY_PREFIX override them.
+set -eu
+cd "$(dirname "$0")/.."
+exec java -jar sentinel-reconcile/target/sentinel-reconcile-*.jar "$@"
