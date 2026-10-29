@@ -140,3 +140,23 @@ Documentation gaps met on the way in are recorded first in the entry diary
   by the request id inside the stream entry, not by message id.
 - Building the `Message` by hand to learn its id first would have meant leaving the protocol the
   pages recommend, for the sake of the measuring instrument; it was not done.
+
+## C2. The four states of the ledger overlap, and need a fifth
+
+- **Kind:** criterion correction.
+- **CRITERION §4** gives four states for every request: answered, timed out (with an error the
+  application saw), dead-lettered, and lost, which is "none of the three".
+- **What is so:** the first three are not exclusive. A request that is dead-lettered on the probe's
+  side gets no reply, so the coordinator also sees it time out; a request can be answered and
+  still leave a copy behind in a stream. And a request sent a moment before the script runs is
+  none of the three without being lost.
+- **What the script does:** `scripts/reconcile` (module `sentinel-reconcile`) assigns the first
+  state that applies, in this order: answered, dead-lettered, timed out, in flight, lost.
+  Dead-lettered comes before timed out, because otherwise no request could ever be counted as
+  dead-lettered. **In flight** is a fifth state: no reply and no error yet, and younger than a grace
+  period (30 s by default, twice the coordinator's request timeout). The timed-out state keeps the
+  error class, since not every error the coordinator sees is a timeout.
+- Next to the state, the script reports where the REQUEST physically is in Redis (pending,
+  unread, delivered, in a `:dlq` stream, trimmed away, in a stream that no longer exists, or not
+  found), which is Q2's second measure, and what became of the outcome of each INFORM reply,
+  which is what O1 needs.

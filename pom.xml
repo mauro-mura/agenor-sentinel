@@ -25,6 +25,7 @@
         <module>sentinel-coordinator</module>
         <module>sentinel-alerter</module>
         <module>sentinel-fixtures</module>
+        <module>sentinel-reconcile</module>
     </modules>
 
     <properties>
