@@ -63,6 +63,51 @@ Documentation gaps met on the way in are recorded first in the entry diary
   Spring Boot packages applications can declare its agents with `base-package`, and a node whose
   declared agents were not found does not report itself as started.
 
+## F2. The application's own Flyway fails when another process created the directory first
+
+- **Kind:** documentation defect.
+- **Version:** 0.39.0, with `agenor-spring-boot-starter` on Spring Boot 4.0.9, JDBC directory on
+  PostgreSQL 16.15.
+- **What the pages say:** `spring-boot-starter`: "Your application's own Flyway
+  (spring-boot-starter-flyway) can use the same database with Boot's defaults. Agenor's
+  migrations are outside db/migration and run after Boot's Flyway, and each schema keeps its own
+  history table, so spring.flyway.* needs no setting for Agenor." `adapters/jdbc-directory`: the
+  directory "can share a database with the HITL queue and with your own schema, created in any
+  order."
+- **What happens:** the coordinator and the alerter run the application's migrations with Boot's
+  Flyway; the probes run none. On 2026-10-29 at 21:10 UTC the probes started first, and Agenor's
+  directory migrations created `agenor_agents`, `agenor_agent_capabilities` and
+  `agenor_directory_schema_history` in `public`. Boot's Flyway in the coordinator and in the
+  alerter then refused to start:
+
+  ```
+  FlywayException: Found non-empty schema(s) "public" but no schema history table.
+  Use baseline() or set baselineOnMigrate to true to initialize the schema history table.
+  ```
+
+  Both processes failed in a loop under `restart: unless-stopped` and never recovered, because
+  Agenor's tables stay. The first complete round of the entry diary had worked only because the
+  coordinator happened to migrate before any probe started.
+- **Why the pages are wrong for this configuration:** "run after Boot's Flyway" holds inside one
+  process. With several processes on one database, which is the distributed configuration,
+  another process's Agenor migrations can run before this process's Boot Flyway, and Boot's
+  defaults do not accept that. The fix the application needs is on `adapters/jdbc-directory`, in
+  the tip for "a Flyway you configure by hand", which the same page says Spring Boot users can
+  skip.
+- **What this example does:** `spring.flyway.baseline-on-migrate: true` and
+  `spring.flyway.baseline-version: 0` in the coordinator and the alerter, marked `@friction F2`.
+  The baseline is below V1, as the page warns, so V1 is not skipped. Checked on three start
+  orders, each with two probes and the whole application answering afterwards: the database left
+  by the failure above (baseline 0, then V1 and V2); an empty database with the probes first and
+  then the coordinator and the alerter together (one baseline, the other process finds the schema
+  up to date); an empty database with the coordinator and the alerter first (V1 and V2, no
+  baseline).
+- **In memory (CRITERION §5, point 7):** the case does not exist; the in-memory directory has no
+  schema.
+- **Missing capability, phrased as CRITERION §5 point 3 asks:** an application whose processes
+  share the directory's database can run its own migrations with the settings the page gives,
+  whichever process starts first.
+
 ## O1. Outcomes published while the alerter is not subscribed never reach it
 
 - **Kind:** observation of documented behaviour; not a defect. To be measured under regime 3.

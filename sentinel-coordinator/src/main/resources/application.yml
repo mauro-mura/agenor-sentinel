@@ -9,6 +9,13 @@ spring:
     password: ${JDBC_PASSWORD:sentinel}
     hikari:
       maximum-pool-size: 6
+  # @friction F2: the probes share this database, and their Agenor directory migrations may run
+  # first. Boot's Flyway then finds a non-empty schema with no history table of its own and refuses
+  # to start, although spring-boot-starter.md says it needs no setting. The baseline must be below
+  # V1, or V1 would be marked as applied and skipped (adapters/jdbc-directory.md).
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 0
 
 server:
   port: 8080
