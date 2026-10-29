@@ -20,7 +20,9 @@ import java.util.concurrent.Executors;
  * <ul>
  *   <li>{@code GET /t/{name}}: 200 when the target is up (the default), 503 when it is down.</li>
  *   <li>{@code POST /control/{name}/up} and {@code /down}: switch a target.</li>
- *   <li>{@code GET /control}: every target that has been switched, with its state.</li>
+ *   <li>{@code POST /control/{name}/slow/{millis}}: answer that target after a delay (0 to stop),
+ *       so that a probe killed in the middle of a check has a request in flight (Q2).</li>
+ *   <li>{@code GET /control}: every target that has been switched or slowed, with its state.</li>
  *   <li>{@code POST /webhook}: records an alert body; {@code GET /webhook} returns them all, one
  *       JSON object per line, each with the time it was received.</li>
  * </ul>
@@ -31,6 +33,7 @@ import java.util.concurrent.Executors;
 public final class Fixtures {
 
     private static final Map<String, Boolean> DOWN = new ConcurrentHashMap<>();
+    private static final Map<String, Long> DELAY_MILLIS = new ConcurrentHashMap<>();
     private static final List<String> WEBHOOK = new CopyOnWriteArrayList<>();
 
     private Fixtures() {
@@ -50,6 +53,14 @@ public final class Fixtures {
     private static void target(HttpExchange ex) throws IOException {
         String name = ex.getRequestURI().getPath().substring("/t/".length());
         boolean down = DOWN.getOrDefault(name, false);
+        long delay = DELAY_MILLIS.getOrDefault(name, 0L);
+        if (delay > 0) {
+            try {
+                Thread.sleep(delay);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         respond(ex, down ? 503 : 200, down ? "down\n" : "up\n");
     }
 
@@ -58,6 +69,7 @@ public final class Fixtures {
         if (parts.length == 2 && "GET".equals(ex.getRequestMethod())) {
             StringBuilder body = new StringBuilder();
             DOWN.forEach((name, down) -> body.append(name).append(' ').append(down ? "down" : "up").append('\n'));
+            DELAY_MILLIS.forEach((name, delay) -> body.append(name).append(" slow ").append(delay).append('\n'));
             respond(ex, 200, body.toString());
             return;
         }
@@ -68,7 +80,14 @@ public final class Fixtures {
             respond(ex, 200, parts[2] + " " + parts[3] + "\n");
             return;
         }
-        respond(ex, 404, "usage: POST /control/{name}/up|down, GET /control\n");
+        if (parts.length == 5 && "POST".equals(ex.getRequestMethod()) && "slow".equals(parts[3])
+                && parts[4].matches("\\d{1,6}")) {
+            DELAY_MILLIS.put(parts[2], Long.parseLong(parts[4]));
+            System.out.println(Instant.now() + " target " + parts[2] + " slow " + parts[4] + " ms");
+            respond(ex, 200, parts[2] + " slow " + parts[4] + " ms\n");
+            return;
+        }
+        respond(ex, 404, "usage: POST /control/{name}/up|down|slow/{millis}, GET /control\n");
     }
 
     private static void webhook(HttpExchange ex) throws IOException {

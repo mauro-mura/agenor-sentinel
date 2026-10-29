@@ -160,3 +160,8 @@ Documentation gaps met on the way in are recorded first in the entry diary
   unread, delivered, in a `:dlq` stream, trimmed away, in a stream that no longer exists, or not
   found), which is Q2's second measure, and what became of the outcome of each INFORM reply,
   which is what O1 needs.
+- **The fifth state must not stand in for a lost one.** A ledger with any request in flight is not
+  a final result: the script says so and exits with status 3. Final ledgers are taken after
+  `scripts/quiesce` has stopped the dispatching and the grace period has passed, so in flight is
+  always zero in them. The coordinator is not stopped for this: its last requests would be left
+  with neither a reply nor an error, and would be counted as lost.

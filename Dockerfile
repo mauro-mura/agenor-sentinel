@@ -9,5 +9,5 @@ COPY ${MODULE}/target/${MODULE}-*.jar /tmp/app.jar
 # extraction when the release that fixes F1 is out.
 RUN java -Djarmode=tools -jar /tmp/app.jar extract --destination /app && rm /tmp/app.jar
 WORKDIR /app
-# exec form, so the JVM is PID 1 and receives SIGTERM directly (regime 2: orderly stop).
+# exec form; under compose an init process is PID 1 and forwards SIGTERM to the JVM (regime 2).
 ENTRYPOINT ["java", "-XX:+ExitOnOutOfMemoryError", "-jar", "/app/app.jar"]
