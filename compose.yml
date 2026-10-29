@@ -1,0 +1,91 @@
+# The whole monitor on one host. Build the jars first: mvn -DskipTests package
+#
+#   docker compose up -d --build --scale probe=2
+#
+# Host ports are bound to 127.0.0.1 only: Agenor authenticates nothing between nodes
+# (adapters/redis.md, Trust model), so neither backend is exposed beyond this machine.
+
+x-agenor-env: &agenor-env
+  REDIS_URI: redis://valkey:6379
+  JDBC_URL: jdbc:postgresql://postgres:5432/sentinel
+  JDBC_USERNAME: sentinel
+  JDBC_PASSWORD: sentinel
+
+services:
+  postgres:
+    image: docker.io/library/postgres:16.15-alpine3.24
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  valkey:
+    image: docker.io/valkey/valkey:8.1.11-alpine3.24
+    ports:
+      - "127.0.0.1:56379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  fixtures:
+    build:
+      context: .
+      args:
+        MODULE: sentinel-fixtures
+    image: localhost/sentinel-fixtures:dev
+    ports:
+      - "127.0.0.1:58080:8080"
+    restart: unless-stopped
+
+  coordinator:
+    build:
+      context: .
+      args:
+        MODULE: sentinel-coordinator
+    image: localhost/sentinel-coordinator:dev
+    environment: *agenor-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  alerter:
+    build:
+      context: .
+      args:
+        MODULE: sentinel-alerter
+    image: localhost/sentinel-alerter:dev
+    environment:
+      <<: *agenor-env
+      WEBHOOK_URL: http://fixtures:8080/webhook
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  probe:
+    build:
+      context: .
+      args:
+        MODULE: sentinel-probe
+    image: localhost/sentinel-probe:dev
+    environment: *agenor-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped

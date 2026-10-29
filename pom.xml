@@ -19,9 +19,48 @@
     <name>Agenor Sentinel</name>
     <description>A distributed availability monitor built on Agenor, from the outside.</description>
 
+    <modules>
+        <module>sentinel-common</module>
+        <module>sentinel-probe</module>
+        <module>sentinel-coordinator</module>
+        <module>sentinel-alerter</module>
+        <module>sentinel-fixtures</module>
+    </modules>
+
     <properties>
         <java.version>21</java.version>
         <!-- The only Agenor version this project uses: a release from Maven Central, never a SNAPSHOT. -->
         <agenor.version>0.39.0</agenor.version>
+        <!--
+            spring-boot-starter.md asks for these two overrides "up to Boot 4.0.8". Boot 4.0.9 still
+            manages Jackson 2.21.7 and Lettuce 6.8.2, so they are needed here as well.
+        -->
+        <jackson-2-bom.version>2.22.1</jackson-2-bom.version>
+        <lettuce.version>7.5.1.RELEASE</lettuce.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>dev.agenor.sentinel</groupId>
+                <artifactId>sentinel-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.agenor</groupId>
+                <artifactId>agenor-spring-boot-starter</artifactId>
+                <version>${agenor.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.agenor</groupId>
+                <artifactId>agenor-adapters</artifactId>
+                <version>${agenor.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.agenor</groupId>
+                <artifactId>agenor-adapters-persistence</artifactId>
+                <version>${agenor.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>

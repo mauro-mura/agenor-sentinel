@@ -57,3 +57,109 @@ Started 2026-10-29 11:24 (+01:00).
 ### Source readings
 
 None.
+
+## Stretch 2: the API the three roles need
+
+Started 2026-10-29 11:31 (+01:00). The pages were downloaded as HTML and converted to text
+locally, so code samples were read exactly rather than through a summarizer.
+
+### Pages read
+
+- `distributed-quick-start`, `spring-boot-starter`, `adapters/redis`, `adapters/jdbc-directory`,
+  `directory`, `messaging`, `agent-development`, `first-agent` (in full or in the relevant
+  sections)
+- Javadoc from the published `-javadoc.jar` files of `agenor-core`, `agenor-runtime`,
+  `agenor-adapters`, `agenor-adapters-persistence` and `agenor-spring-boot-starter` 0.39.0:
+  `@Agent`, `BaseAgent`, `DialogueCapability`
+
+### What each role needs, and where it was found
+
+| Need | Found | Where |
+|---|---|---|
+| Declare that a probe has capability `probe` | `@Agent(capabilities = {"probe"})` | Javadoc of `@Agent` only; no page shows it |
+| Find probes | `AgentDiscovery.findByCapability("probe")` | `directory` |
+| Send a check and wait for the outcome | `DialogueCapability.request(target, content, timeout)`, answered with `inform` or `failure` | `agent-development`, Javadoc of `DialogueCapability` |
+| Publish and subscribe to `outcomes` | `getMessageDispatcher().publish(...)`, `@AgenorMessageHandler("outcomes")` | `agent-development`, `messaging` |
+| Redis transport under the starter | `agenor.messaging.provider: redis` and `agenor.messaging.redis.*` | `spring-boot-starter`, `adapters/redis` |
+| JDBC directory under the starter | `agenor.directory.provider: jdbc` and `agenor.directory.jdbc.*` | `spring-boot-starter` |
+| JDBC presence under the starter | `agenor.directory.presence: jdbc`, `agenor.directory.heartbeat-interval` | `adapters/jdbc-directory` only |
+
+### Observations
+
+- **Capabilities on an agent class are documented only in the Javadoc.** The `directory` page
+  shows capabilities on a hand-built `AgentDescriptor`; nothing on a page says how a scanned
+  `BaseAgent` advertises them. A reader of the pages alone would not find
+  `@Agent(capabilities = ...)`. (Q1)
+- **Presence keys are missing from the starter's configuration reference.** `spring-boot-starter`
+  lists `agenor.directory.provider` and `agenor.directory.jdbc.*`, and says presence is not
+  documented there. The keys `agenor.directory.presence`, `heartbeat-interval` and
+  `staleness-window` are on `adapters/jdbc-directory`. (Q1, Q3)
+- **The request protocol does not expose the message id before sending.**
+  `DialogueCapability.request(...)` builds and sends the REQUEST itself and returns only the
+  future of the reply. The reconciliation ledger (CRITERION §4) wants each request written to a
+  table *before* it is sent, *with its message id*. The application can know its own request
+  id, carried in the payload, but not Agenor's message id at that point. (Q1, Q2)
+- **An agent's id is a random UUID unless the class or the constructor sets one** (Javadoc of
+  `@Agent` and `BaseAgent()`). With one probe class scanned in every probe process, `@Agent("probe")`
+  would give every probe the same address, so a probe either keeps the generated UUID, which
+  changes on every start, or derives its id from something per process.
+- `messaging` says topic subscriptions are not cleaned up when an agent stops. Each topic
+  subscription is its own consumer group on Redis (`adapters/redis`). Relevant to Q5.
+- `adapters/redis` states that a node that never comes back keeps its stream, and that the remedy
+  is `DEL agenor:node:<nodeId>` when an id is retired. It does not say how an operator learns
+  which ids are retired when ids are generated (CRITERION §3, as expected).
+- **No page covers one agent class replicated across processes.** Every distributed example
+  gives each node agents with fixed, distinct ids. A search of the pages read for "replica",
+  "scale" and "several processes" finds nothing. A reader of the pages would most likely copy
+  `@Agent("probe")` from the examples; only the Javadoc of `@Agent` warns that two instances then
+  claim one address. With discovery by capability the id does not matter to the caller, so the
+  probe keeps the generated UUID. (Q1)
+
+### Source readings
+
+None.
+
+## Stretch 3: the five modules
+
+From 2026-10-29 11:34 to 11:54 (+01:00): writing the code, with a few more readings along the way.
+
+### Steps
+
+1. A parent `pom.xml` with five modules: `sentinel-common` (payloads and the application's
+   schema), `sentinel-probe`, `sentinel-coordinator`, `sentinel-alerter`, and `sentinel-fixtures`
+   (the fake targets and the alert webhook, JDK only).
+2. The probe is discovered by package scanning (`agenor.agents.base-package`). The coordinator and
+   the alerter need the application's database, so they are Spring beans registered with
+   `runtime.registerAgent(...)`, as `spring-boot-starter` shows.
+3. A `Dockerfile` and a `compose.yml` with PostgreSQL, Valkey, the fixtures and the three roles.
+4. `mvn -DskipTests package` succeeded on the first attempt. The packaged jars contain the Agenor
+   0.39.0 artifacts from Central, Lettuce 7.5.1.RELEASE and Jackson 2.22.1.
+
+### Pages read
+
+- `spring-boot-starter` again, for agents built as beans and for the version overrides
+- Javadoc: `BaseAgent` (methods), `@DialogueHandler`, `@Behavior`, `Message`, `DialogueMessage`,
+  `AgentDescriptor`
+
+### Observations
+
+- **The version-override note on `spring-boot-starter` is stale.** It says the
+  `jackson-2-bom.version` and `lettuce.version` overrides are needed "up to Boot 4.0.8". The
+  `spring-boot-dependencies` 4.0.9 pom on Central still manages Jackson 2.21.7 and Lettuce
+  6.8.2, so the overrides are needed on 4.0.9 too. A reader on 4.0.9 who trusts the page would
+  leave them out. (Q1)
+- **The reply carries the request's message id, but only the reply.**
+  `DialogueMessage.inReplyTo()` on the reply is the REQUEST's id, so the ledger records it when a
+  reply arrives. For a request that times out or is dead-lettered, the application never learns
+  Agenor's message id. The ledger is keyed by the application's own request id, carried in the
+  payload; the reconciliation script has to find it inside stream entries. (Q2)
+- The Javadoc of `@DialogueHandler` shows only `void` handlers and does not say whether a
+  `CompletableFuture` may be returned, as `messaging` documents for `@AgenorMessageHandler`. The
+  probe's handler blocks on its HTTP check and returns `void`.
+- Whether `@Behavior` methods on an agent registered with `registerAgent(...)` (rather than
+  discovered by scanning) are scheduled is not stated on a page. The coordinator relies on it;
+  the first run will show.
+
+### Source readings
+
+None.
