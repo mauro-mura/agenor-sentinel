@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: sentinel-probe
+  main:
+    banner-mode: off
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+
+agenor:
+  runtime:
+    name: sentinel-probe
+  agents:
+    base-package: dev.agenor.sentinel.probe.agents
+  messaging:
+    provider: redis
+    redis:
+      uri: ${REDIS_URI:redis://localhost:6379}
+      consumer-group-prefix: sentinel
+  directory:
+    provider: jdbc
+    jdbc:
+      url: ${JDBC_URL:jdbc:postgresql://localhost:5432/sentinel}
+      username: ${JDBC_USERNAME:sentinel}
+      password: ${JDBC_PASSWORD:sentinel}
+      pool-size: 4
+    # adapters/jdbc-directory.md: JDBC presence is opt-in, and needs heartbeats to mean anything.
+    # The staleness window is left unset, so it derives from the interval (about three times it).
+    presence: jdbc
+    heartbeat-interval: 15s
