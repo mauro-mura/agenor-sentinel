@@ -208,3 +208,15 @@ behind the Docker CLI, with docker-compose 1.29.2 as the compose provider.
 None. The entry is complete without a single reading of Agenor's source; CRITERION §7 expected
 at least one (Q1). The question that expectation was about, what happens to the stream of a node
 that never comes back, has not been asked yet: it belongs to Q2.
+
+## After the entry: the first round depended on start order
+
+Added on 2026-10-29 at 22:28 (+01:00), when the stack was started again from scratch. The probes
+started before the coordinator, and the coordinator and the alerter could no longer start: their
+own Flyway refused a database that already held Agenor's directory tables. The first complete
+round of stretch 4 had worked because the coordinator happened to start first. The pages say the
+application's Flyway needs no setting next to the directory; with several processes on one
+database it needs two. Recorded as **F2** in `FINDINGS.md`. (Q1)
+
+No source reading was needed: the setting is on `adapters/jdbc-directory`, in a tip addressed to
+applications that configure Flyway by hand.
