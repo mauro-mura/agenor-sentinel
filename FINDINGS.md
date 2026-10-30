@@ -172,6 +172,69 @@ Documentation gaps met on the way in are recorded first in the entry diary
   either finishes the work it has accepted, outcome included, or gives it back so that someone
   else can.
 
+## F4. A broker that comes back at a new address is never reached again, and health stays UP
+
+- **Kind:** behavioural defect for the part that is silent; the cause of the part that does not
+  reconnect is not established. Details below.
+- **Version:** 0.39.0, with `agenor-spring-boot-starter` on Spring Boot 4.0.9, Java 21, Redis
+  transport on Valkey 8.1.11. The images carry `lettuce-core` 7.5.1 and `netty-resolver-dns`
+  4.2.19 (in `/app/lib`, as the starter brings them).
+- **Orchestrator:** podman 4.9.3 behind the Docker CLI, docker-compose 1.29.2. Podman gives a
+  container a new IP address on every start; that is what this finding depends on.
+- **Run:** `scripts/measure 4` with its defaults, on commit `23d14de`, 2026-10-30 from 14:58:00 to
+  15:05:46 UTC: three probes, Valkey stopped at 14:59:37.478, down 10 s, answering PING again at
+  14:59:55.242 with 0 keys loaded. Data: `data/regime4/20261030T145800Z-seed3/`.
+- **What happens:** Valkey came back at 10.89.3.71; before the stop it was at 10.89.3.63. Every
+  process kept reconnecting to the old address until the end of the run. In the log of the run,
+  all 211 `Cannot reconnect` lines of Lettuce's `ConnectionWatchdog`, from the five processes,
+  name 10.89.3.63:
+
+  ```
+  Reconnecting, last destination was valkey.dns.podman/10.89.3.63:6379
+  Cannot reconnect to [valkey/<unresolved>:6379]: Host is unreachable: valkey.dns.podman/10.89.3.63:6379
+  ```
+
+  The name is resolved again on each attempt (`<unresolved>`), but to the old address. Podman's
+  DNS is not the cause: checked by hand after the run, `getent hosts valkey` inside a probe gave
+  the new address within a second of a second restart, while the processes, 8 minutes after the
+  first, were still trying 10.89.3.63. The stale address is held inside each JVM. Whether by
+  Netty's DNS resolver cache, by Lettuce, or by how Agenor builds its Lettuce client is not
+  established: finding out means reading source, which this example does not do without asking.
+- **What the application sees:** nothing that says the system stopped.
+
+  | Requests sent | 14:58:27–14:59:27 | 14:59:27–14:59:57, the stop | 14:59:57–15:04:57 |
+  |---|---:|---:|---:|
+  | Answered | 22 | 5 | 0 |
+  | Timed out | 0 | 4 | 104 |
+
+  (`timeline.txt`, 30 s slices by the time each request was sent). Every
+  health sample after the stop, 75 of them, 15 per process, reads `UP`, with the Agenor component
+  `UP` and `agents.running: 1` (`health.csv`). The logs hold no ERROR line: Lettuce's reconnect
+  failures, the consumer loops' "Transient error ... Command timed out after 1 minute(s)", and the
+  coordinator's own timeouts are all WARN (`log-counts.txt`: 0 ERROR, 372 WARN).
+- **What the pages say:** `adapters/redis` says that on reconnect (Lettuce auto-reconnect) the
+  consumer loop resumes from the last acknowledged id and that no message is lost. It does not
+  say what happens when the broker's address changes. `spring-boot-starter` says the health
+  endpoint "reflects the true state of the runtime"; it reports agents only, and nothing about
+  the broker.
+- **Why the silent part is a defect:** CRITERION §5 point 5 names "a system that stops working
+  silently", and §4 Q7 adds that it is a defect even if no page promises otherwise. For five
+  minutes no request was answered, and the only health check an orchestrator could read said UP.
+  Whatever the cause of the stale address, a node that cannot reach its transport reports itself
+  healthy.
+- **Why the rest is not classified:** a client that never follows a changed address is a defect
+  of someone, but not necessarily of Agenor, and it may not happen where a restarted broker keeps
+  its address (Docker often reassigns the same one; a Kubernetes pod that is recreated never
+  does). It is recorded as observed.
+- **In memory (CRITERION §5, point 7):** the case does not exist; there is no broker.
+- **What this example does:** Q7 asks what happens when the broker comes back *empty*, which this
+  run could not show, since no process reached it. `compose.yml` now gives Valkey a fixed address,
+  so that a restart brings it back where the processes look for it, and regime 4 is measured
+  again. That isolates Q7's variable; it is not a fix, and it is marked `@friction F4`.
+- **Missing capability, phrased as CRITERION §5 point 3 asks:** a node that cannot reach its
+  transport says so where an orchestrator looks; and a node reaches a broker that has come back,
+  wherever it has come back.
+
 ## O1. Outcomes published while the alerter is not subscribed never reach it
 
 - **Kind:** observation of documented behaviour; not a defect. To be measured under regime 3.

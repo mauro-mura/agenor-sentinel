@@ -66,7 +66,7 @@ sleep "$WARMUP"
 
 ( while :; do scripts/health --csv "$OUT/health.csv" > /dev/null 2>&1; sleep 15; done ) &
 SAMPLER=$!
-trap 'kill "$SAMPLER" 2>/dev/null' EXIT
+trap 'kill "$SAMPLER" 2>/dev/null || true' EXIT
 scripts/census --csv "$OUT/census.csv"
 scripts/faults --regime "$REGIME" --seed "$SEED" --count "$COUNT" --interval "$INTERVAL" --out "$OUT/faults.csv"
 # The last probe to go away gets a full interval, like the others, before the dispatching stops.

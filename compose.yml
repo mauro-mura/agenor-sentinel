@@ -38,6 +38,12 @@ services:
     # loads it on start, so a restart would bring streams and consumer groups back. Without it, a
     # restarted broker is empty.
     command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    # @friction F4: under podman a restarted container gets a new address, and Agenor's processes
+    # keep reconnecting to the old one, so regime 4 would measure that instead of an empty broker.
+    # A fixed address brings Valkey back where they look for it. Remove it when F4 is resolved.
+    networks:
+      default:
+        ipv4_address: 10.77.0.250
     ports:
       - "127.0.0.1:56379:6379"
     healthcheck:
@@ -101,3 +107,9 @@ services:
       valkey:
         condition: service_healthy
     restart: unless-stopped
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.77.0.0/24

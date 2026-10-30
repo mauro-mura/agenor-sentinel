@@ -1,0 +1,2 @@
+seed,n,regime,action,container,victim_agent_id,victim_node_id,killed_at,exit_code,stop_seconds,replacement_agent_id,replacement_node_id,replacement_running_at,broker_keys_loaded
+3,1,4,"valkey stopped, down 10 s, started",valkey,,,2026-10-30T14:59:37.478Z,0,2.1,,,2026-10-30T14:59:55.242Z,0
