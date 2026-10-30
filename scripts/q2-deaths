@@ -8,7 +8,10 @@ For each probe killed without goodbye, the requests addressed to its node are sp
   - sent after its death: sent to the dead node while the coordinator still chose it.
 Each group is counted by state (CRITERION §4) and by where the REQUEST is in Redis. The time from
 the death to the last request sent to the dead node is reported too: it belongs to Q3, and is here
-because it bounds the second group.
+because it bounds the second group, together with the dead node's last heartbeat (its
+last_seen in the ledger, read after the run, when it no longer moves): the time from that
+heartbeat to the death, and to the last request sent to the dead node, which a coordinator that
+filters on presence keeps within the staleness window.
 
 Standard library only.
 """
@@ -20,7 +23,9 @@ import datetime
 
 
 def instant(text):
-    return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    value = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    # last_seen comes from a PostgreSQL timestamp without a zone, written in UTC.
+    return value if value.tzinfo else value.replace(tzinfo=datetime.timezone.utc)
 
 
 def main():
@@ -52,11 +57,18 @@ def main():
         answered_before = sum(1 for r in requests if instant(r["created_at"]) < killed and r["state"] == "ANSWERED")
         last = max((instant(r["created_at"]) for r in after), default=None)
         chosen_for = (last - killed).total_seconds() if last else 0.0
+        seen = next((r["probe_node_last_seen"] for r in requests if r["probe_node_last_seen"]), "")
+        last_seen = instant(seen) if seen else None
+        silent_before = f"{(killed - last_seen).total_seconds():.1f}" if last_seen else ""
+        chosen_since_seen = f"{(last - last_seen).total_seconds():.1f}" if last_seen and last else ""
 
         print()
         print(f"#{fault['n']} {fault['killed_at']} {fault['container']} node {fault['victim_node_id']}")
         print(f"  answered before its death: {answered_before}")
         print(f"  still chosen for {chosen_for:.1f} s after its death")
+        if last_seen:
+            print(f"  last heartbeat {silent_before} s before its death; "
+                  f"last request sent {chosen_since_seen or '-'} s after it")
         for group, rows in (("in flight at death", before), ("sent after death", after)):
             counts = collections.Counter((r["state"], r["request_location"]) for r in rows)
             print(f"  {group}: {len(rows)}")
@@ -65,7 +77,9 @@ def main():
                 totals[(group, state, location)] += n
                 out_rows.append(dict(n=fault["n"], victim_node_id=fault["victim_node_id"], group=group,
                                      state=state, request_location=location, requests=n,
-                                     chosen_for_seconds=f"{chosen_for:.1f}"))
+                                     chosen_for_seconds=f"{chosen_for:.1f}",
+                                     last_heartbeat_to_death_seconds=silent_before,
+                                     last_heartbeat_to_last_request_seconds=chosen_since_seen))
 
     print()
     print("All faults")
@@ -77,7 +91,9 @@ def main():
     if args.out:
         with open(args.out, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["n", "victim_node_id", "group", "state", "request_location",
-                                                   "requests", "chosen_for_seconds"])
+                                                   "requests", "chosen_for_seconds",
+                                                   "last_heartbeat_to_death_seconds",
+                                                   "last_heartbeat_to_last_request_seconds"])
             writer.writeheader()
             writer.writerows(out_rows)
 

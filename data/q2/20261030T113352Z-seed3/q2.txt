@@ -1,0 +1,47 @@
+Ledger: 230 request(s): ANSWERED 211, TIMED_OUT 19
+Faults: 5 probe(s) killed without goodbye
+
+#1 2026-10-30T11:35:30.037Z agenor-sentinel_probe_1 node 6a01da4e-a886-4a68-9344-95f839231173
+  answered before its death: 8
+  still chosen for 38.3 s after its death
+  last heartbeat 5.5 s before its death; last request sent 43.8 s after it
+  in flight at death: 0
+  sent after death: 4
+    TIMED_OUT      UNREAD                  4
+
+#2 2026-10-30T11:37:30.004Z agenor-sentinel_probe_3 node f2cb2f05-d825-4d37-88fa-a84a34dbcafd
+  answered before its death: 19
+  still chosen for 32.3 s after its death
+  last heartbeat 4.8 s before its death; last request sent 37.1 s after it
+  in flight at death: 0
+  sent after death: 4
+    TIMED_OUT      UNREAD                  4
+
+#3 2026-10-30T11:39:30.326Z agenor-sentinel_probe_3 node 071d396d-07ca-482c-9de4-c794aaa543af
+  answered before its death: 12
+  still chosen for 32.0 s after its death
+  last heartbeat 10.0 s before its death; last request sent 42.0 s after it
+  in flight at death: 1
+    TIMED_OUT      PENDING                 1
+  sent after death: 3
+    TIMED_OUT      UNREAD                  3
+
+#4 2026-10-30T11:41:30.172Z agenor-sentinel_probe_1 node 88cd33a9-2334-40e8-a650-13eb5ad651bb
+  answered before its death: 36
+  still chosen for 24.1 s after its death
+  last heartbeat 9.3 s before its death; last request sent 33.5 s after it
+  in flight at death: 0
+  sent after death: 3
+    TIMED_OUT      UNREAD                  3
+
+#5 2026-10-30T11:43:29.760Z agenor-sentinel_probe_2 node 7ff36ad9-b329-48c1-bf40-fecb0b2693a7
+  answered before its death: 58
+  still chosen for 32.6 s after its death
+  last heartbeat 4.9 s before its death; last request sent 37.5 s after it
+  in flight at death: 0
+  sent after death: 4
+    TIMED_OUT      UNREAD                  4
+
+All faults
+  in flight at death   TIMED_OUT      PENDING                 1
+  sent after death     TIMED_OUT      UNREAD                 18

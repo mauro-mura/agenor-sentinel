@@ -1,0 +1,162 @@
+#!/usr/bin/env -S python3 -I
+"""Counts the lines of code that carry a friction or a supervision tag (CRITERION §6), by tag and
+by the question or finding it names.
+
+    scripts/tags [--csv FILE]
+
+A tag is "@friction" or "@supervision" followed by an id such as Q3 or F1, in a comment. What it
+covers, and so what is counted, depends on where the comment is:
+  - Java: the tag is in the Javadoc of a declaration, and the whole declaration is counted, from
+    its first line to the brace that closes it (or to its semicolon, for a field).
+  - Files with "#" comments (YAML, Dockerfile, scripts): the first line after the comment block,
+    the lines indented deeper than it (a YAML key's children), and the lines continued from it by
+    a trailing backslash.
+Blank lines and comment lines inside the covered code are not counted. The rule is mechanical on
+purpose: a tag covers what it is attached to, and the count does not depend on judgement.
+
+Scans this repository's sources: *.java, *.yml, *.yaml, *.properties, Dockerfile* and scripts/*,
+outside target/ and data/. Standard library only.
+"""
+import argparse
+import csv
+import os
+import re
+import sys
+
+TAG = re.compile(r"@(friction|supervision)\s+([A-Z]\d+)\b")
+SKIP_DIRS = {".git", ".idea", "target", "data", ".claude"}
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+SELF = os.path.abspath(__file__)
+
+
+def sources():
+    for directory, dirs, files in os.walk(ROOT):
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS)
+        for name in sorted(files):
+            path = os.path.join(directory, name)
+            relative = os.path.relpath(path, ROOT)
+            if path == SELF:
+                continue
+            if name.endswith(".java"):
+                yield relative, "java"
+            elif (name.endswith((".yml", ".yaml", ".properties")) or name.startswith("Dockerfile")
+                  or relative.startswith("scripts" + os.sep)):
+                yield relative, "hash"
+
+
+def is_java_comment(line):
+    stripped = line.strip()
+    return stripped.startswith(("//", "/*", "*")) or stripped.endswith("*/")
+
+
+def java_tags(lines):
+    """(tag, id, line number of the tag, counted lines) for each tag in a Java file."""
+    found = []
+    i = 0
+    while i < len(lines):
+        if not lines[i].strip().startswith("/**"):
+            i += 1
+            continue
+        start = i
+        while "*/" not in lines[i]:
+            i += 1
+        tags = [(m.group(1), m.group(2), start + k + 1)
+                for k, line in enumerate(lines[start:i + 1]) for m in TAG.finditer(line)]
+        i += 1
+        if not tags:
+            continue
+        # The declaration: annotations included, up to its closing brace or its semicolon.
+        counted, depth, opened = 0, 0, False
+        j = i
+        while j < len(lines):
+            line = lines[j]
+            if line.strip() and not is_java_comment(line):
+                counted += 1
+            code = re.sub(r'"(?:\\.|[^"\\])*"', '""', line.split("//")[0])
+            depth += code.count("{") - code.count("}")
+            opened = opened or "{" in code
+            j += 1
+            if (opened and depth <= 0) or (not opened and code.rstrip().endswith(";")):
+                break
+        found.extend((tag, ident, number, counted) for tag, ident, number in tags)
+    return found
+
+
+def indent(line):
+    return len(line) - len(line.lstrip())
+
+
+def hash_tags(lines):
+    """(tag, id, line number of the tag, counted lines) for each tag in a file with # comments."""
+    found = []
+    i = 0
+    while i < len(lines):
+        if not lines[i].lstrip().startswith("#"):
+            i += 1
+            continue
+        start = i
+        while i < len(lines) and lines[i].lstrip().startswith("#"):
+            i += 1
+        tags = [(m.group(1), m.group(2), start + k + 1)
+                for k, line in enumerate(lines[start:i]) for m in TAG.finditer(line)]
+        if not tags or i >= len(lines) or not lines[i].strip():
+            continue
+        first = lines[i]
+        counted = 1
+        j = i + 1
+        continued = first.rstrip().endswith("\\")
+        while j < len(lines):
+            line = lines[j]
+            if continued or (line.strip() and indent(line) > indent(first)):
+                if line.strip() and not line.lstrip().startswith("#"):
+                    counted += 1
+                continued = line.rstrip().endswith("\\")
+                j += 1
+            elif line.strip() and line.lstrip().startswith("#") and indent(line) > indent(first):
+                j += 1
+            else:
+                break
+        found.extend((tag, ident, number, counted) for tag, ident, number in tags)
+        i = j
+    return found
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--csv", help="also write one row per tag to this file")
+    args = parser.parse_args()
+
+    rows = []
+    for relative, kind in sources():
+        with open(os.path.join(ROOT, relative), encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+        for tag, ident, number, counted in (java_tags if kind == "java" else hash_tags)(lines):
+            rows.append({"tag": tag, "id": ident, "file": relative, "line": number,
+                         "lines": counted})
+
+    if args.csv:
+        with open(args.csv, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["tag", "id", "file", "line", "lines"])
+            writer.writeheader()
+            writer.writerows(rows)
+
+    for row in rows:
+        print(f"  @{row['tag']:<12} {row['id']:<4} {row['lines']:>4}  {row['file']}:{row['line']}")
+    print()
+    totals = {}
+    for row in rows:
+        key = (row["tag"], row["id"])
+        tags, counted = totals.get(key, (0, 0))
+        totals[key] = (tags + 1, counted + row["lines"])
+    print(f"  {'tag':<13} {'id':<4} {'tags':>4} {'lines':>5}")
+    for (tag, ident), (tags, counted) in sorted(totals.items()):
+        print(f"  @{tag:<12} {ident:<4} {tags:>4} {counted:>5}")
+    for tag in ("friction", "supervision"):
+        tags = sum(1 for row in rows if row["tag"] == tag)
+        counted = sum(row["lines"] for row in rows if row["tag"] == tag)
+        print(f"  @{tag:<12} {'all':<4} {tags:>4} {counted:>5}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

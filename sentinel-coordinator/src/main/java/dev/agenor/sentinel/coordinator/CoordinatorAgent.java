@@ -1,6 +1,7 @@
 package dev.agenor.sentinel.coordinator;
 
 import dev.agenor.core.AgentDescriptor;
+import dev.agenor.core.AgentStatus;
 import dev.agenor.core.Message;
 import dev.agenor.core.annotations.Agent;
 import dev.agenor.core.annotations.Behavior;
@@ -12,8 +13,10 @@ import dev.agenor.sentinel.common.CheckOutcome;
 import dev.agenor.sentinel.common.CheckRequest;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -23,8 +26,9 @@ import static dev.agenor.core.BehaviorType.CYCLIC;
  * Each round, claims the targets that are due, hands each one to a probe found by capability, and
  * publishes every outcome on the {@code outcomes} topic.
  *
- * <p>Probes are chosen round-robin among whatever {@code findByCapability("probe")} returns at that
- * moment, with no filter of its own: what that costs when a probe dies is Q3's measure.
+ * <p>Probes are chosen round-robin among those {@code findByCapability("probe")} returns at that
+ * moment whose presence reads {@code RUNNING} (see {@link #live}). Without that filter a probe
+ * killed without goodbye stays a candidate for as long as the run lasts (FINDINGS.md, Q2).
  */
 @Agent("coordinator")
 public class CoordinatorAgent extends BaseAgent {
@@ -49,15 +53,37 @@ public class CoordinatorAgent extends BaseAgent {
         if (due.isEmpty()) {
             return;
         }
-        List<AgentDescriptor> probes = agentDirectory.findByCapability(PROBE_CAPABILITY).join();
+        List<AgentDescriptor> probes = live(agentDirectory.findByCapability(PROBE_CAPABILITY).join());
         if (probes.isEmpty()) {
-            log.warn("{} target(s) due and no probe in the directory", due.size());
+            log.warn("{} target(s) due and no live probe in the directory", due.size());
             return;
         }
         for (Targets.Target target : due) {
             AgentDescriptor probe = probes.get((int) Math.floorMod(next.getAndIncrement(), (long) probes.size()));
             dispatch(target, probe);
         }
+    }
+
+    /**
+     * The candidates whose presence reads {@code RUNNING}.
+     *
+     * @friction Q3: {@code findByCapability} does not filter by liveness ({@code directory.md}), and
+     *     a probe killed without goodbye keeps its directory row with status {@code RUNNING}, so a
+     *     filter on {@code AgentDescriptor.status()}, or {@code AgentQuery.status(RUNNING)}, keeps it
+     *     as well. Only {@code getStatus} weighs {@code last_seen} against the staleness window
+     *     ({@code adapters/jdbc-directory.md}), and it takes one call per candidate.
+     */
+    private List<AgentDescriptor> live(List<AgentDescriptor> candidates) {
+        List<CompletableFuture<AgentStatus>> statuses = candidates.stream()
+                .map(probe -> agentDirectory.getStatus(probe.agentId()))
+                .toList();
+        List<AgentDescriptor> live = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            if (statuses.get(i).join() == AgentStatus.RUNNING) {
+                live.add(candidates.get(i));
+            }
+        }
+        return live;
     }
 
     private void dispatch(Targets.Target target, AgentDescriptor probe) {

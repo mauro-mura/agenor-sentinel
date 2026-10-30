@@ -244,3 +244,87 @@ Two parts of Q2 stay open:
 - **O1 again, at start-up only.** 4 outcomes were published and never applied, all between
   09:34:24.349 and 09:34:24.398 UTC; the alerter subscribed to `outcomes` at 09:34:24.915. The
   alerter was not restarted in this run, so this is the start-up case already recorded in O1.
+
+## Q3. The coordinator can tell who is alive, in 12 lines; partial: regime 3 only
+
+- **Kind:** outcome of a question (CRITERION §4, Q3), **partial**. Regimes 1 and 2 (scale down,
+  rolling upgrade) are not measured yet, nor the cost of the extra directory reads.
+- **Version and configuration:** as in Q2: 0.39.0, the starter in all three roles, JDBC directory
+  and JDBC presence, heartbeat every 15 s, staleness window left to its default, which
+  `adapters/jdbc-directory` derives as three times the interval: 45 s. Same orchestrator.
+- **Run:** `scripts/measure-q2` with the same defaults and seed as Q2 (seed 3, five probes killed
+  with SIGKILL, one every 120 s), on commit `627e76b`, 2026-10-30 from 11:33:52 to 11:46:16 UTC.
+  Data: `data/q2/20261030T113352Z-seed3/`. The run without the filter is Q2's.
+
+### What the application needs
+
+`findByCapability` does not filter by liveness, as `directory` says. A filter on the
+descriptor's own status does not help either: a probe killed without goodbye keeps its row with
+status `RUNNING` (Q2), so `AgentDescriptor.status()` and `AgentQuery.status(RUNNING)` both keep
+it. What tells it apart is `getStatus`, which `adapters/jdbc-directory` describes as reading
+`status` and `last_seen` and answering `UNKNOWN` past the staleness window.
+
+The coordinator now keeps only the candidates whose `getStatus` reads `RUNNING`, one call per
+candidate, in parallel (`CoordinatorAgent.live`, `@friction Q3`). `scripts/tags` counts
+**12 lines**; the call that applies it in `round()` changes one existing line and is not counted.
+No cache, no window of its own: the backend's window is used as it is.
+
+### The numbers, same seed, without and with the filter
+
+| | Without filter (`e0b9afc`) | With filter (`627e76b`) |
+|---|---:|---:|
+| Requests | 230 | 230 |
+| Answered | 132 | 211 |
+| Timed out | 98 | 19 |
+| Dead-lettered, lost | 0, 0 | 0, 0 |
+| Sent to a probe already dead | 96 | 18 |
+| In flight at a death | 2 | 1 |
+| Dead probe still chosen, after its death | 111.5 to 602.0 s (until the dispatching stopped) | 24.1 to 38.3 s |
+
+Per kill, with the filter (from `scripts/q2-deaths`, which takes each dead node's last heartbeat
+from the `probe_node_last_seen` column of the ledger):
+
+| Kill | Last heartbeat → kill | Kill → last request sent | Last heartbeat → last request sent | Sent after death |
+|-----:|----------------------:|-------------------------:|-----------------------------------:|-----------------:|
+|    1 |                 5.5 s |                   38.3 s |                             43.8 s |                4 |
+|    2 |                 4.8 s |                   32.3 s |                             37.1 s |                4 |
+|    3 |                10.0 s |                   32.0 s |                             42.0 s |                3 |
+|    4 |                 9.3 s |                   24.1 s |                             33.5 s |                3 |
+|    5 |                 4.9 s |                   32.6 s |                             37.5 s |                4 |
+
+Every last request to a dead probe was sent within 45 s of its last heartbeat: the probe leaves
+the candidates when `getStatus` turns `UNKNOWN`, as the page says. The 18 requests sent after a
+death fall inside that window, and no filter built on presence can avoid them; with the request
+protocol they end as timeouts the application sees, as in Q2.
+
+### Against CRITERION §7
+
+- **"A dead probe stays a candidate for at least the staleness window": refuted as written.**
+  Measured from the death it stayed a candidate for 24.1 to 38.3 s, less than the 45 s window.
+  The window runs from the last heartbeat, which came 4.8 to 10.0 s before the kill, not from the
+  death; and the last request is sent before the window closes, not when it closes. Measured from
+  the last heartbeat, the window is the bound, and it held.
+- **"A filter of 15–30 lines": refuted.** It is 12.
+- **"Generic": confirmed.** The method names no type of this domain: it takes the descriptors
+  found for a capability and keeps those whose presence reads `RUNNING`. Anyone choosing an agent
+  by capability among replaceable processes would write the same lines.
+
+### What it decides, and where the criterion pulls two ways
+
+Q3 says that generic lines make this the second case for liveness-filtered discovery, and that
+the decision not to add it is reopened. CRITERION §5, point 2 says something is proposed to
+Agenor only if Agenor cannot express it, and "inconvenient is not enough; inexpressible is".
+Agenor expresses it, with the public API, in 12 lines. The two rules give different answers on
+the same evidence. Which one prevails is not decided here, and CRITERION.md is not changed.
+
+What the evidence does add to either reading: the obvious filter, on the descriptor's status,
+is wrong in exactly the case it is written for, and nothing in `directory` or
+`adapters/jdbc-directory` says so. The page shows `AgentQuery.status(RUNNING)` without saying
+that the stored status of an agent that died without goodbye stays `RUNNING`. That is a gap in
+the pages whichever rule prevails.
+
+### Still to measure for Q3
+
+- Regimes 1 and 2: probes stopped with SIGTERM. The entry diary saw a probe remove its own row on
+  an orderly stop, so the filter may have nothing to do there; it is not measured.
+- The cost: one `getStatus`, a read of `agenor_agents`, per candidate per round.
