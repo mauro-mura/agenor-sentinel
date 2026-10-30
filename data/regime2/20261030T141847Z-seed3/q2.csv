@@ -1,0 +1,10 @@
+n,victim_node_id,group,state,request_location,requests,chosen_for_seconds,last_heartbeat_to_death_seconds,last_heartbeat_to_last_request_seconds
+1,855c1e3b-3a75-4c58-b05c-4cbb2b8a5f5a,in flight at stop,TIMED_OUT,PENDING,1,0.0,,
+1,13c96eee-ab16-4638-961d-647eac973597,in flight at stop,TIMED_OUT,PENDING,1,0.0,,
+2,e1102c35-ddc4-404c-b7a2-701c4fe807d3,in flight at stop,TIMED_OUT,PENDING,2,0.0,,
+2,55904446-a3d8-4087-90df-324c2ec6e9fd,in flight at stop,TIMED_OUT,PENDING,1,0.0,,
+3,7428eea9-40f7-440d-b157-137a570e836b,in flight at stop,TIMED_OUT,PENDING,1,0.0,,
+3,3912d61c-ed17-47d2-a044-545c3d73374d,in flight at stop,TIMED_OUT,PENDING,1,0.0,,
+3,2cc1ba72-b741-4e01-a9d1-292ad56f2345,in flight at stop,TIMED_OUT,PENDING,1,0.0,,
+4,a6123957-53a3-4bba-9bfc-0604682bd0f5,in flight at stop,TIMED_OUT,PENDING,1,0.0,,
+5,099e8cb2-fdfd-4a70-a35d-b25a95275a0e,in flight at stop,TIMED_OUT,PENDING,1,0.0,,

@@ -1,0 +1,104 @@
+Ledger: 241 request(s): ANSWERED 231, TIMED_OUT 10
+Faults: 15 probe(s) gone: SIGTERM probe, then start 15
+
+#1 2026-10-30T14:20:32.232Z SIGTERM probe, then start agenor-sentinel_probe_2 node 37649ded-d366-480f-bce3-3220ad3178d5 exit 143
+  answered before its stop: 9
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+#1 2026-10-30T14:20:43.482Z SIGTERM probe, then start agenor-sentinel_probe_3 node 855c1e3b-3a75-4c58-b05c-4cbb2b8a5f5a exit 143
+  answered before its stop: 10
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+#1 2026-10-30T14:20:55.596Z SIGTERM probe, then start agenor-sentinel_probe_1 node 13c96eee-ab16-4638-961d-647eac973597 exit 143
+  answered before its stop: 11
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+#2 2026-10-30T14:22:32.334Z SIGTERM probe, then start agenor-sentinel_probe_1 node e1102c35-ddc4-404c-b7a2-701c4fe807d3 exit 143
+  answered before its stop: 9
+  still chosen for 0.0 s after its stop
+  in flight at stop: 2
+    TIMED_OUT      PENDING                 2
+  sent after stop: 0
+
+#2 2026-10-30T14:22:44.477Z SIGTERM probe, then start agenor-sentinel_probe_3 node 55904446-a3d8-4087-90df-324c2ec6e9fd exit 143
+  answered before its stop: 12
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+#2 2026-10-30T14:22:56.685Z SIGTERM probe, then start agenor-sentinel_probe_2 node 22b22269-f208-48fe-a25f-f9ab28ae3a70 exit 143
+  answered before its stop: 16
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+#3 2026-10-30T14:24:32.399Z SIGTERM probe, then start agenor-sentinel_probe_2 node 7428eea9-40f7-440d-b157-137a570e836b exit 143
+  answered before its stop: 9
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+#3 2026-10-30T14:24:44.842Z SIGTERM probe, then start agenor-sentinel_probe_1 node 3912d61c-ed17-47d2-a044-545c3d73374d exit 143
+  answered before its stop: 15
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+#3 2026-10-30T14:24:56.755Z SIGTERM probe, then start agenor-sentinel_probe_3 node 2cc1ba72-b741-4e01-a9d1-292ad56f2345 exit 143
+  answered before its stop: 15
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+#4 2026-10-30T14:26:32.362Z SIGTERM probe, then start agenor-sentinel_probe_2 node a6123957-53a3-4bba-9bfc-0604682bd0f5 exit 143
+  answered before its stop: 10
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+#4 2026-10-30T14:26:43.597Z SIGTERM probe, then start agenor-sentinel_probe_1 node 6c67bb4e-429b-454a-b93f-bcee20bcbfc8 exit 143
+  answered before its stop: 15
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+#4 2026-10-30T14:26:54.762Z SIGTERM probe, then start agenor-sentinel_probe_3 node 3f99c0ef-a51b-4fb5-b7c2-7620f3083384 exit 143
+  answered before its stop: 13
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+#5 2026-10-30T14:28:32.503Z SIGTERM probe, then start agenor-sentinel_probe_1 node 52019ad0-84bb-4dfc-ba44-8b62b5891038 exit 143
+  answered before its stop: 12
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+#5 2026-10-30T14:28:42.946Z SIGTERM probe, then start agenor-sentinel_probe_3 node 099e8cb2-fdfd-4a70-a35d-b25a95275a0e exit 143
+  answered before its stop: 14
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+#5 2026-10-30T14:28:57.551Z SIGTERM probe, then start agenor-sentinel_probe_2 node af71b3d9-9b09-477c-b346-7fa5616104dd exit 143
+  answered before its stop: 14
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+All faults
+  in flight at stop    TIMED_OUT      PENDING                10

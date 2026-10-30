@@ -1,0 +1,99 @@
+#!/usr/bin/env -S python3 -I
+"""What Agenor keeps in Redis and in the directory at one moment: one CSV row.
+
+    scripts/census [--csv FILE] [--staleness SECONDS]
+
+Q4 records what an orderly stop leaves behind, and Q5 how the same quantities grow over a long run
+(CRITERION §4). Each call counts:
+  - rows in agenor_agents, those with status RUNNING, and those whose last_seen is older than the
+    staleness window (45 s by default, three times the 15 s heartbeat): the rows getStatus would
+    answer UNKNOWN for;
+  - Redis keys under the prefix, by kind: node streams, topic streams, ':dlq' streams, others;
+  - consumer groups across all streams, their pending entries, and the entries the streams hold;
+  - Valkey's used_memory.
+With --csv the row is appended to the file, with a header if the file is new; it is printed either
+way. Standard library only; needs the docker CLI and the compose stack of this repository.
+"""
+
+import argparse
+import csv
+import datetime
+import json
+import os
+import subprocess
+
+PREFIX = os.environ.get("KEY_PREFIX", "sentinel")
+COLUMNS = ["at", "agent_rows", "agent_rows_running", "agent_rows_stale", "node_streams",
+           "topic_streams", "dlq_streams", "other_keys", "consumer_groups", "pending_entries",
+           "stream_entries", "used_memory"]
+
+
+def compose_exec(service, *args, stdin=None):
+    return subprocess.run(["docker", "compose", "exec", "-T", service, *args], input=stdin,
+                          check=True, capture_output=True, text=True).stdout
+
+
+def valkey(*commands):
+    """One reply per command, as parsed JSON, from a single valkey-cli call."""
+    out = compose_exec("valkey", "valkey-cli", "--json", stdin="".join(c + "\n" for c in commands))
+    return [json.loads(line) for line in out.splitlines() if line.strip()]
+
+
+def psql(sql):
+    return compose_exec("postgres", "psql", "-U", "sentinel", "-d", "sentinel", "-At", "-c", sql).strip()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--csv", help="append the row to this CSV file")
+    parser.add_argument("--staleness", type=int, default=45, help="seconds; the directory's window")
+    args = parser.parse_args()
+
+    at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    rows, running, stale = psql(
+        "SELECT count(*), count(*) FILTER (WHERE status = 'RUNNING'), "
+        f"count(*) FILTER (WHERE last_seen < now() AT TIME ZONE 'UTC' - interval '{args.staleness} seconds') "
+        "FROM agenor_agents").split("|")
+
+    keys = sorted(valkey(f"KEYS {PREFIX}:*")[0])
+    kinds = {"node": 0, "topic": 0, "dlq": 0, "other": 0}
+    streams = []
+    for key, kind in zip(keys, valkey(*(f"TYPE {k}" for k in keys))):
+        if key.endswith(":dlq"):
+            kinds["dlq"] += 1
+        elif key.startswith(f"{PREFIX}:node:"):
+            kinds["node"] += 1
+        elif key.startswith(f"{PREFIX}:topic:"):
+            kinds["topic"] += 1
+        else:
+            kinds["other"] += 1
+        if kind == "stream":
+            streams.append(key)
+
+    groups = pending = entries = 0
+    if streams:
+        replies = valkey(*(f"XINFO GROUPS {k}" for k in streams), *(f"XLEN {k}" for k in streams))
+        for reply in replies[:len(streams)]:
+            groups += len(reply)
+            pending += sum(g["pending"] for g in reply)
+        entries = sum(replies[len(streams):])
+
+    memory = compose_exec("valkey", "valkey-cli", "INFO", "memory")
+    used = next(line.split(":")[1].strip() for line in memory.splitlines() if line.startswith("used_memory:"))
+
+    row = dict(at=at, agent_rows=rows, agent_rows_running=running, agent_rows_stale=stale,
+               node_streams=kinds["node"], topic_streams=kinds["topic"], dlq_streams=kinds["dlq"],
+               other_keys=kinds["other"], consumer_groups=groups, pending_entries=pending,
+               stream_entries=entries, used_memory=used)
+    if args.csv:
+        new = not os.path.exists(args.csv) or os.path.getsize(args.csv) == 0
+        with open(args.csv, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=COLUMNS)
+            if new:
+                writer.writeheader()
+            writer.writerow(row)
+    print(" ".join(f"{k}={v}" for k, v in row.items()))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,43 @@
+Ledger: 195 request(s): ANSWERED 193, TIMED_OUT 2
+Faults: 6 probe(s) gone: scale down to 2 6
+
+#2 2026-10-30T14:35:47.616Z scale down to 2 agenor-sentinel_probe_3 node dc0f6f4f-1206-4807-aa4e-cc7a59f0f924 exit 143
+  answered before its stop: 7
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+#2 2026-10-30T14:35:47.617Z scale down to 2 agenor-sentinel_probe_4 node 335c8ccb-58d7-4a46-9958-f15a4d69ea56 exit 143
+  answered before its stop: 8
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+#2 2026-10-30T14:35:47.617Z scale down to 2 agenor-sentinel_probe_5 node ec56807f-196b-48fe-98b9-b1064882f39d exit 143
+  answered before its stop: 8
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+#4 2026-10-30T14:39:47.653Z scale down to 2 agenor-sentinel_probe_3 node 411f5a75-0e69-4fa2-b697-81d9691306a8 exit 143
+  answered before its stop: 8
+  still chosen for 0.0 s after its stop
+  in flight at stop: 0
+  sent after stop: 0
+
+#4 2026-10-30T14:39:47.653Z scale down to 2 agenor-sentinel_probe_4 node 46a9a688-b443-49fe-89a6-ffc252006284 exit 143
+  answered before its stop: 7
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+#4 2026-10-30T14:39:47.654Z scale down to 2 agenor-sentinel_probe_5 node 71cb243d-eeeb-49ba-960b-afcce95f169f exit 143
+  answered before its stop: 7
+  still chosen for 0.0 s after its stop
+  in flight at stop: 1
+    TIMED_OUT      PENDING                 1
+  sent after stop: 0
+
+All faults
+  in flight at stop    TIMED_OUT      PENDING                 2
