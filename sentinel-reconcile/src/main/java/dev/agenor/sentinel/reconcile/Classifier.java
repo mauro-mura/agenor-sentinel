@@ -4,6 +4,7 @@ import dev.agenor.sentinel.reconcile.RedisSnapshot.Kind;
 import dev.agenor.sentinel.reconcile.RedisSnapshot.Sighting;
 import dev.agenor.sentinel.reconcile.RedisSnapshot.StreamInfo;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -23,10 +24,41 @@ import java.util.List;
  * </ol>
  * Dead-lettered comes before timed out because a dead-lettered request is also timed out by the
  * coordinator: in the opposite order the dead-lettered state could never be seen.
+ *
+ * <p>An unanswered request also gets a {@link Cause}: which end of it stopped while it was open. The
+ * cause never changes the state. A request whose coordinator died stays {@link State#LOST}, as
+ * CRITERION §4 defines it; the cause only keeps it apart from the requests a dead probe lost (Q2).
  */
 final class Classifier {
 
+    /** The coordinator's request timeout ({@code CoordinatorAgent.REQUEST_TIMEOUT}). */
+    static final long REQUEST_TIMEOUT_SECONDS = 15;
+
     enum State { ANSWERED, DEAD_LETTERED, TIMED_OUT, IN_FLIGHT, LOST }
+
+    /**
+     * Which end of an unanswered request stopped while it was open. An end stopped while the request
+     * was open when its last heartbeat ({@code last_seen}) is older than the request plus the
+     * request timeout: alive past that moment, it would have heartbeated after it. An end with no
+     * directory row left is not counted as stopped, since nothing says when it left: an orderly
+     * stop removes the row, and the stop may have come long after the request.
+     */
+    enum Cause {
+        /** The probe stopped; the coordinator did not. */
+        PROBE_STOPPED,
+        /**
+         * The coordinator that sent the request stopped. Its future and its timeout died with it
+         * ({@code dialog-protocol}), so nothing records an error, and a reply goes to the stream of
+         * a node that will never read it again.
+         */
+        SENDER_STOPPED,
+        /** Both stopped. */
+        BOTH_STOPPED,
+        /** Neither stopped while the request was open. */
+        NONE,
+        /** An answered request, or a ledger row with no sender recorded. */
+        NOT_APPLICABLE
+    }
 
     /** Where the REQUEST is in Redis. The first four come from {@link RedisSnapshot.Delivery}. */
     enum Location {
@@ -59,7 +91,11 @@ final class Classifier {
         NOT_APPLICABLE
     }
 
-    record Verdict(State state, Location location, Sighting request, Outcome outcome) {
+    /**
+     * @param reply the probe's reply as found in Redis, or {@code null}; for a request whose sender
+     *              stopped, its stream is the dead sender's
+     */
+    record Verdict(State state, Location location, Sighting request, Outcome outcome, Cause cause, Sighting reply) {
     }
 
     private Classifier() {
@@ -85,7 +121,26 @@ final class Classifier {
         } else {
             state = State.LOST;
         }
-        return new Verdict(state, location, request, outcome(entry, sightings, topicStream));
+        Sighting reply = sightings.stream().filter(s -> s.kind() == Kind.REPLY).findFirst().orElse(null);
+        return new Verdict(state, location, request, outcome(entry, sightings, topicStream),
+                state == State.ANSWERED ? Cause.NOT_APPLICABLE : cause(entry), reply);
+    }
+
+    private static Cause cause(LedgerEntry entry) {
+        if (entry.senderId() == null) {
+            return Cause.NOT_APPLICABLE;
+        }
+        Instant timedOutAt = entry.createdAt().plusSeconds(REQUEST_TIMEOUT_SECONDS);
+        boolean probe = stoppedBefore(entry.probeLastHeartbeat(), timedOutAt);
+        boolean sender = stoppedBefore(entry.senderLastHeartbeat(), timedOutAt);
+        if (probe && sender) {
+            return Cause.BOTH_STOPPED;
+        }
+        return sender ? Cause.SENDER_STOPPED : probe ? Cause.PROBE_STOPPED : Cause.NONE;
+    }
+
+    private static boolean stoppedBefore(Instant lastHeartbeat, Instant moment) {
+        return lastHeartbeat != null && lastHeartbeat.isBefore(moment);
     }
 
     private static Location location(LedgerEntry entry, Sighting request, StreamInfo probeStream) {

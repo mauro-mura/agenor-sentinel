@@ -89,7 +89,7 @@ public class CoordinatorAgent extends BaseAgent {
     private void dispatch(Targets.Target target, AgentDescriptor probe) {
         UUID requestId = UUID.randomUUID();
         String nodeId = probe.endpoint() == null ? null : probe.endpoint().nodeId();
-        ledger.recordSent(requestId, target.id(), probe.agentId(), nodeId);
+        ledger.recordSent(requestId, getAgentId(), target.id(), probe.agentId(), nodeId);
 
         var check = new CheckRequest(requestId.toString(), target.id(), target.url(), CHECK_TIMEOUT_MILLIS);
         dialogue.request(probe.agentId(), check, REQUEST_TIMEOUT)

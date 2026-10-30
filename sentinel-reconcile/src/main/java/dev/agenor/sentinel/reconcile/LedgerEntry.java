@@ -12,6 +12,14 @@ import java.time.Instant;
  *                        without goodbye keeps {@code RUNNING} until something removes its row.
  * @param probeNodeLastSeen the latest {@code last_seen} of those rows, as stored (a timestamp with no
  *                        time zone), or {@code null}
+ * @param probeLastHeartbeat the same {@code last_seen} as an instant ({@code last_seen} is written in
+ *                        UTC), or {@code null}
+ * @param senderId        the agent id of the coordinator that sent the request, or {@code null} for
+ *                        rows written before the ledger recorded it
+ * @param senderNodeId    the node id of the sender's directory row, or {@code null} when it has no
+ *                        row left
+ * @param senderLastHeartbeat the {@code last_seen} of the sender's directory row, or {@code null} when
+ *                        it has no row left
  * @param outcomeApplied  whether the alerter recorded the outcome in {@code outcome_seen}
  */
 record LedgerEntry(
@@ -23,6 +31,10 @@ record LedgerEntry(
         String probeNodeId,
         String probeNodeStatus,
         String probeNodeLastSeen,
+        Instant probeLastHeartbeat,
+        String senderId,
+        String senderNodeId,
+        Instant senderLastHeartbeat,
         Instant repliedAt,
         String replyPerformative,
         Instant errorAt,

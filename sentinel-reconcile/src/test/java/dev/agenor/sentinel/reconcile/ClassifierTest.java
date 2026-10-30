@@ -1,5 +1,6 @@
 package dev.agenor.sentinel.reconcile;
 
+import dev.agenor.sentinel.reconcile.Classifier.Cause;
 import dev.agenor.sentinel.reconcile.Classifier.Location;
 import dev.agenor.sentinel.reconcile.Classifier.Outcome;
 import dev.agenor.sentinel.reconcile.Classifier.State;
@@ -20,6 +21,9 @@ class ClassifierTest {
     static final Instant SENT = Instant.parse("2026-10-29T21:27:58.505Z");
     static final String NODE = "837b34eb-f44b-45fa-aea9-5d12c84dff9d";
     static final String NODE_STREAM = "sentinel:node:" + NODE;
+    static final String SENDER = "c0a1b2c3-0000-4000-8000-000000000001";
+    static final String SENDER_NODE = "5e4d3c2b-0000-4000-8000-000000000002";
+    static final String SENDER_STREAM = "sentinel:node:" + SENDER_NODE;
     static final double GRACE = 30;
 
     /** A probe stream whose first entry is older than the request: nothing was trimmed. */
@@ -122,6 +126,53 @@ class ClassifierTest {
                 .outcome()).isEqualTo(Outcome.NOT_APPLICABLE);
     }
 
+    @Test
+    void anEndStoppedWhileTheRequestWasOpenWhenItsLastHeartbeatCameBeforeTheTimeout() {
+        Instant before = SENT.plusSeconds(Classifier.REQUEST_TIMEOUT_SECONDS - 1);
+        Instant after = SENT.plusSeconds(Classifier.REQUEST_TIMEOUT_SECONDS + 1);
+
+        assertThat(cause(entry(60).probeHeartbeat(before).senderHeartbeat(after))).isEqualTo(Cause.PROBE_STOPPED);
+        assertThat(cause(entry(60).probeHeartbeat(after).senderHeartbeat(before))).isEqualTo(Cause.SENDER_STOPPED);
+        assertThat(cause(entry(60).probeHeartbeat(before).senderHeartbeat(before))).isEqualTo(Cause.BOTH_STOPPED);
+        assertThat(cause(entry(60).probeHeartbeat(after).senderHeartbeat(after))).isEqualTo(Cause.NONE);
+    }
+
+    @Test
+    void anEndWithNoDirectoryRowIsNotCountedAsStopped() {
+        Instant after = SENT.plusSeconds(Classifier.REQUEST_TIMEOUT_SECONDS + 1);
+
+        assertThat(cause(entry(60).probeHeartbeat(null).senderHeartbeat(after))).isEqualTo(Cause.NONE);
+        assertThat(cause(entry(60).probeHeartbeat(after).senderHeartbeat(null))).isEqualTo(Cause.NONE);
+    }
+
+    @Test
+    void theCauseNeverChangesTheState() {
+        var lost = entry(60).senderHeartbeat(SENT);
+
+        Verdict v = Classifier.classify(lost.build(), List.of(request(Delivery.DELIVERED, false), reply()),
+                PROBE_STREAM, TOPIC, GRACE);
+
+        assertThat(v.state()).isEqualTo(State.LOST);
+        assertThat(v.cause()).isEqualTo(Cause.SENDER_STOPPED);
+        assertThat(v.reply().key()).isEqualTo(SENDER_STREAM);
+        assertThat(Classifier.classify(lost.replied("INFORM").build(), List.of(), PROBE_STREAM, TOPIC, GRACE).cause())
+                .isEqualTo(Cause.NOT_APPLICABLE);
+    }
+
+    @Test
+    void aRowWithNoSenderRecordedHasNoCause() {
+        assertThat(cause(entry(60).probeHeartbeat(SENT).noSender())).isEqualTo(Cause.NOT_APPLICABLE);
+    }
+
+    static Cause cause(EntryBuilder entry) {
+        return Classifier.classify(entry.build(), List.of(), PROBE_STREAM, TOPIC, GRACE).cause();
+    }
+
+    static Sighting reply() {
+        return new Sighting(SENDER_STREAM, (SENT.toEpochMilli() + 380) + "-0", Kind.REPLY, false,
+                Delivery.UNREAD, 0, null);
+    }
+
     static Sighting request(Delivery delivery, boolean deadLettered) {
         return new Sighting(deadLettered ? NODE_STREAM + ":dlq" : NODE_STREAM, SENT.toEpochMilli() + "-0",
                 Kind.REQUEST, deadLettered, delivery, 0, null);
@@ -142,9 +193,27 @@ class ClassifierTest {
         private String performative;
         private Instant errorAt;
         private boolean applied;
+        private String senderId = SENDER;
+        private Instant probeHeartbeat = SENT.plusSeconds(60);
+        private Instant senderHeartbeat = SENT.plusSeconds(60);
 
         EntryBuilder(double age) {
             this.age = age;
+        }
+
+        EntryBuilder probeHeartbeat(Instant at) {
+            this.probeHeartbeat = at;
+            return this;
+        }
+
+        EntryBuilder senderHeartbeat(Instant at) {
+            this.senderHeartbeat = at;
+            return this;
+        }
+
+        EntryBuilder noSender() {
+            this.senderId = null;
+            return this;
         }
 
         EntryBuilder replied(String performative) {
@@ -166,6 +235,7 @@ class ClassifierTest {
         LedgerEntry build() {
             return new LedgerEntry("34756dd8-19a8-4223-8767-43da5fc41926", SENT, age, 1,
                     "e100ca15-5d24-4cfa-8a20-a60d0b46d783", NODE, "RUNNING", "2026-10-29 21:27:51.39475",
+                    probeHeartbeat, senderId, senderId == null ? null : SENDER_NODE, senderHeartbeat,
                     repliedAt, performative,
                     errorAt, errorAt == null ? null : "java.util.concurrent.TimeoutException", null, applied);
         }
