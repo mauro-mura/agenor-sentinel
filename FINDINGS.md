@@ -235,6 +235,63 @@ Documentation gaps met on the way in are recorded first in the entry diary
   transport says so where an orchestrator looks; and a node reaches a broker that has come back,
   wherever it has come back.
 
+## F5. A broker that comes back empty stops every consumer loop, for good, and health stays UP
+
+- **Kind:** behavioural defect: "a system that stops working silently" (CRITERION §5 point 5;
+  §4 Q7 says it is one even if no page promises otherwise).
+- **Version:** 0.39.0, with `agenor-spring-boot-starter` on Spring Boot 4.0.9, Java 21, Redis
+  transport on Valkey 8.1.11 with no persistence (`--save "" --appendonly no`), at a fixed address
+  (F4). Same orchestrator.
+- **Run:** `scripts/measure 4` with its defaults, on commit `f461f48`, 2026-10-30 from 15:21:07 to
+  15:28:53 UTC. Valkey stopped at 15:22:42.922, down 10 s, answering PING at 15:23:00.675 with 0
+  keys loaded. Data: `data/regime4/20261030T152107Z-seed3/`.
+- **What happens:** every process reconnects, between 15:23:26 and 15:23:37 (Lettuce's
+  `Reconnected to valkey/<unresolved>:6379`). From then on every consumer loop, the node stream of
+  each of the five processes and the alerter's subscription to `outcomes`, fails once a second
+  until the end of the run:
+
+  ```
+  WARN ConsumerLoop : Transient error in consumer loop for 'sentinel:node:24bf7103-...':
+       NOGROUP No such key 'sentinel:node:24bf7103-...' or consumer group 'sentinel:cg:node'
+       in XREADGROUP with GROUP option
+  ```
+
+  The first such line is at 15:23:35.273, the last at 15:28:52.801: 1915 in all
+  (`log-counts.txt`). No loop recreates its group; no line of the logs says one did. The node
+  groups are created once, when the factory is built (`adapters/redis`: "when
+  `RedisMessagingFactory.build()` constructs the transport"), and the topic group once, when the
+  subscription is made, so nothing in a running process creates them again.
+
+  Sending still works, which keeps the failure out of sight: the coordinator's `XADD` to a probe's
+  stream recreates the stream, with no group, and the send succeeds. At the end Valkey held 3 node
+  streams with 108 entries and no consumer group at all (`census.csv`); the reconciliation finds
+  every unanswered request in a stream with no group (`NO_GROUP`).
+- **What the application sees:**
+
+  | Requests sent | 15:21:33–15:22:33 | 15:22:33–15:23:03, the stop | 15:23:03–15:28:03 |
+  |---|---:|---:|---:|
+  | Answered | 22 | 5 | 0 |
+  | Timed out | 0 | 6 | 102 |
+
+  (`timeline.txt`). No outcome reached the alerter after the stop, so no alert could be raised,
+  for a target going down or coming back. Every one of the 75 health samples taken after the stop
+  reads `UP`, with the Agenor component `UP` and `agents.running: 1` (`health.csv`). The logs hold
+  no ERROR line (`log-counts.txt`): the loops call the failure "transient", at WARN, forever.
+- **What the pages say:** `adapters/redis` promises durability "with AOF/RDB", so losing the data
+  of a broker with no persistence is not a defect by itself. It says that on reconnect the loop
+  "resumes reading from the last acknowledged ID" and that "no messages are lost; pending entries
+  are claimed on the next iteration". It does not say what a loop does when its group is gone, and
+  `spring-boot-starter` does not say when the health indicator reports anything other than UP.
+- **Against the job dispatcher's case:** that example stopped Valkey for 10 s with its data
+  intact, and the system resumed. The difference here is only that the data, groups included, did
+  not come back.
+- **In memory (CRITERION §5, point 7):** the case does not exist; there is no broker to lose.
+- **What this example does:** nothing. Every process would have to be restarted for the groups to
+  be created again; an orchestrator does that only for a process whose health says so, and here it
+  says UP. The example waits for the release that fixes this (CRITERION §5, point 8).
+- **Missing capability, phrased as CRITERION §5 point 3 asks:** a node whose broker has lost its
+  consumer groups either reads again or says, where an orchestrator looks, that it cannot.
+
 ## O1. Outcomes published while the alerter is not subscribed never reach it
 
 - **Kind:** observation of documented behaviour; not a defect. To be measured under regime 3.
@@ -546,3 +603,35 @@ the final ledger:
   agent's id does change on every start (Q2), and an orderly stop still leaves no row: the probe
   deletes it on the way out.
 
+## Q7. The broker comes back empty: the system stops, and does not notice
+
+- **Kind:** outcome of a question (CRITERION §4, Q7). It found F5.
+- **Run:** the second run of regime 4, with Valkey at a fixed address (F5 gives the data). The
+  first run of regime 4 could not answer Q7: no process reached the restarted broker at all (F4).
+
+### What decides it
+
+Q7 asks two things.
+
+- **Do the consumer loops recreate their groups, or fail with `NOGROUP` forever?** They fail
+  with `NOGROUP` forever: once a second per loop, for the 5 minutes and 17 seconds from the first
+  failure to the end of the run, with no group ever created again.
+- **If they fail, does the application see it: an error, a crashed state, a health check?** No.
+  The failures are logged at WARN as transient; no ERROR is logged; the agents stay `RUNNING`; the
+  health endpoint of every process answers UP throughout. The application's only sign is its own
+  requests timing out, all of them, which an application that sends nothing it waits for would not
+  have either.
+
+So the system stops working silently, which Q7 calls a defect even if no page promises otherwise:
+F5.
+
+### Against CRITERION §7
+
+- **Q7: "unknown."** The outcome is the worse of the two the question names.
+
+### What it adds to F4
+
+Both regime 4 runs ended the same way for the application: no request answered after the stop,
+health UP. In the first the broker could not be reached; in the second it was reached and could
+not be read. A node of this stack has no way, today, to tell an orchestrator that its transport is
+not working, whatever the reason.

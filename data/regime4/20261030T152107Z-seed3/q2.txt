@@ -1,0 +1,5 @@
+Ledger: 135 request(s): ANSWERED 27, TIMED_OUT 108
+Faults: 0 probe(s) gone: 
+
+All faults
+  no request was addressed to a killed probe
