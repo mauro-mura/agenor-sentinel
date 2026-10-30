@@ -1,0 +1,11 @@
+seed=3 count=5 interval=120 probes=3 delay_ms=3000 warmup=60 grace=30
+agenor=0.39.0
+commit=627e76b
+started=2026-10-30T11:33:52Z
+alpha slow 3000 ms
+bravo slow 3000 ms
+charlie slow 3000 ms
+delta slow 3000 ms
+echo slow 3000 ms
+dispatching stopped at 2026-10-30T11:45:38.954Z
+finished=2026-10-30T11:46:16Z
