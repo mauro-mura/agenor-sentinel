@@ -1,0 +1,86 @@
+#!/usr/bin/env -S python3 -I
+"""Q2's measures, from the faults CSV (scripts/faults) and the ledger CSV (scripts/reconcile --csv).
+
+    scripts/q2-deaths faults.csv ledger.csv [--out q2.csv]
+
+For each probe killed without goodbye, the requests addressed to its node are split in two:
+  - in flight at its death: sent before it was killed and never answered;
+  - sent after its death: sent to the dead node while the coordinator still chose it.
+Each group is counted by state (CRITERION §4) and by where the REQUEST is in Redis. The time from
+the death to the last request sent to the dead node is reported too: it belongs to Q3, and is here
+because it bounds the second group.
+
+Standard library only.
+"""
+
+import argparse
+import collections
+import csv
+import datetime
+
+
+def instant(text):
+    return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("faults")
+    parser.add_argument("ledger")
+    parser.add_argument("--out", help="CSV file, one row per fault, group, state and location")
+    args = parser.parse_args()
+
+    with open(args.faults, newline="") as f:
+        faults = [r for r in csv.DictReader(f) if r["regime"] == "3"]
+    with open(args.ledger, newline="") as f:
+        ledger = list(csv.DictReader(f))
+    by_node = collections.defaultdict(list)
+    for row in ledger:
+        by_node[row["probe_node_id"]].append(row)
+
+    states = collections.Counter(r["state"] for r in ledger)
+    print(f"Ledger: {len(ledger)} request(s): " + ", ".join(f"{s} {n}" for s, n in sorted(states.items())))
+    print(f"Faults: {len(faults)} probe(s) killed without goodbye")
+
+    out_rows = []
+    totals = collections.Counter()
+    for fault in faults:
+        killed = instant(fault["killed_at"])
+        requests = by_node.get(fault["victim_node_id"], [])
+        before = [r for r in requests if instant(r["created_at"]) < killed and r["state"] != "ANSWERED"]
+        after = [r for r in requests if instant(r["created_at"]) >= killed]
+        answered_before = sum(1 for r in requests if instant(r["created_at"]) < killed and r["state"] == "ANSWERED")
+        last = max((instant(r["created_at"]) for r in after), default=None)
+        chosen_for = (last - killed).total_seconds() if last else 0.0
+
+        print()
+        print(f"#{fault['n']} {fault['killed_at']} {fault['container']} node {fault['victim_node_id']}")
+        print(f"  answered before its death: {answered_before}")
+        print(f"  still chosen for {chosen_for:.1f} s after its death")
+        for group, rows in (("in flight at death", before), ("sent after death", after)):
+            counts = collections.Counter((r["state"], r["request_location"]) for r in rows)
+            print(f"  {group}: {len(rows)}")
+            for (state, location), n in sorted(counts.items()):
+                print(f"    {state:<14} {location:<18} {n:6d}")
+                totals[(group, state, location)] += n
+                out_rows.append(dict(n=fault["n"], victim_node_id=fault["victim_node_id"], group=group,
+                                     state=state, request_location=location, requests=n,
+                                     chosen_for_seconds=f"{chosen_for:.1f}"))
+
+    print()
+    print("All faults")
+    if not totals:
+        print("  no request was addressed to a killed probe")
+    for (group, state, location), n in sorted(totals.items()):
+        print(f"  {group:<20} {state:<14} {location:<18} {n:6d}")
+
+    if args.out:
+        with open(args.out, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["n", "victim_node_id", "group", "state", "request_location",
+                                                   "requests", "chosen_for_seconds"])
+            writer.writeheader()
+            writer.writerows(out_rows)
+
+
+if __name__ == "__main__":
+    main()

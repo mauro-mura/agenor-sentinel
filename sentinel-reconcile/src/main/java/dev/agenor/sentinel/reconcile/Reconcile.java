@@ -34,6 +34,10 @@ import java.util.stream.Stream;
  * <p>Usage: {@code scripts/reconcile [--csv FILE] [--grace SECONDS]}. The grace period, 30 s by
  * default, is twice the coordinator's request timeout: a request younger than that without an
  * answer or an error is reported as in flight rather than lost.
+ *
+ * <p>A ledger with any request in flight is not a final result (FINDINGS.md, C2): the script says
+ * so and exits with status 3, so that the fifth state never takes the place of a lost one. Stop the
+ * dispatching with {@code scripts/quiesce}, wait out the grace period, and run it again.
  */
 public final class Reconcile {
 
@@ -92,6 +96,13 @@ public final class Reconcile {
             }
             System.out.println();
             System.out.println("One row per request: " + csv);
+        }
+        long inFlight = verdicts.stream().filter(v -> v.state() == State.IN_FLIGHT).count();
+        if (inFlight > 0) {
+            System.out.println();
+            System.out.printf("NOT A FINAL RESULT: %d request(s) still in flight. Stop the dispatching "
+                    + "(scripts/quiesce), wait %.0f s, and run again.%n", inFlight, grace);
+            System.exit(3);
         }
     }
 

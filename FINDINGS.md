@@ -160,3 +160,87 @@ Documentation gaps met on the way in are recorded first in the entry diary
   unread, delivered, in a `:dlq` stream, trimmed away, in a stream that no longer exists, or not
   found), which is Q2's second measure, and what became of the outcome of each INFORM reply,
   which is what O1 needs.
+- **The fifth state must not stand in for a lost one.** A ledger with any request in flight is not
+  a final result: the script says so and exits with status 3. Final ledgers are taken after
+  `scripts/quiesce` has stopped the dispatching and the grace period has passed, so in flight is
+  always zero in them. The coordinator is not stopped for this: its last requests would be left
+  with neither a reply nor an error, and would be counted as lost.
+
+## Q2. A probe killed without goodbye: its work times out, and nothing is lost
+
+- **Kind:** outcome of a question (CRITERION §4, Q2). No defect.
+- **Version:** 0.39.0, with `agenor-spring-boot-starter` in all three roles, so every start gets
+  a new node id. Redis transport on Valkey 8.1.11; JDBC directory and JDBC presence on
+  PostgreSQL, heartbeat every 15 s, staleness window left to its default.
+- **Orchestrator:** podman 4.9.3 behind the Docker CLI, with docker-compose 1.29.2,
+  `restart: unless-stopped`. Restart and kill behaviour belong to it.
+- **Run:** `scripts/measure-q2` with its defaults, on commit `e0b9afc`, 2026-10-30 from 09:33:54
+  to 09:46:16 UTC. Three probes; regime 3 at seed 3: five probes killed with SIGKILL, one every
+  120 s; every target answering after 3 s, below the probe's 5 s check timeout; the
+  coordinator's request timeout is 15 s. Each killed probe was replaced 5.4 to 6.6 s after its
+  death, under a new node id **and a new agent id**. Data: `data/q2/20261030T093354Z-seed3/`.
+
+### The ledger
+
+230 requests, final (none in flight after `scripts/quiesce` and the 30 s grace period):
+
+| State         | Requests |
+|---------------|---------:|
+| answered      |      132 |
+| dead-lettered |        0 |
+| timed out     |       98 |
+| in flight     |        0 |
+| **lost**      |    **0** |
+
+Every one of the 98 timed out with `java.util.concurrent.TimeoutException`, and every one was
+addressed to a probe that had been killed. Split as Q2 asks:
+
+| Kill | Killed at (UTC) | In flight at death | Sent after death | Still chosen after death |
+|-----:|-----------------|-------------------:|-----------------:|-------------------------:|
+|    1 | 09:35:28.327    |                  1 |               35 |                  602.0 s |
+|    2 | 09:37:28.324    |                  0 |               26 |                  472.0 s |
+|    3 | 09:39:28.930    |                  1 |               19 |                  367.4 s |
+|    4 | 09:41:28.694    |                  0 |               11 |                  241.6 s |
+|    5 | 09:43:28.821    |                  0 |                5 |                  111.5 s |
+|      | **total**       |              **2** |           **96** |                          |
+
+### Where the unanswered requests are
+
+- **The 2 in flight at death** are in the pending list of the dead node's own stream
+  (`sentinel:node:<old node id>`), delivered once to the consumer of that node, which no longer
+  exists. `adapters/redis` says entries idle past `pendingEntriesTimeoutMs` are reclaimed by the
+  consumer loop reading that stream; for a node id that is never reused there is no such loop, so
+  nobody reclaims them and they never reach the `:dlq`.
+- **The 96 sent after death** are unread in the dead node's stream. The page says such a stream
+  waits for its node and is never expired; under the starter the node never comes back.
+
+### What decides it
+
+Q2 counts as an Agenor defect a request the framework accepted that ends up lost. None did: the
+request protocol (`DialogueCapability.request` with a timeout) turned every request to a dead probe
+into an error the application saw. CRITERION §7 expected exactly this for requests with a reply.
+
+Two parts of Q2 stay open:
+
+- **The decisive case named in §7, a send that expects no reply, was not measured.** This
+  application sends none. Without a timeout to surface them, the same 98 messages would have
+  stayed in the dead streams with no outcome at all.
+- Whether `adapters/redis` describes this "only halfway", as §7 expected, is not settled by
+  numbers. The page covers a node that never comes back, and does not say that a node id
+  generated on every start makes this the normal case.
+
+### What the run shows beyond Q2
+
+- **A dead probe is never dropped.** Each killed probe was still being chosen when the dispatching
+  stopped, up to 602 s after its death. At the end the directory held 10 rows, all `RUNNING`:
+  the coordinator, the alerter, the three live probes and the five dead ones. Their `last_seen`
+  stopped at the last heartbeat before the kill, so presence did record the deaths. The
+  coordinator chooses round-robin over `findByCapability("probe")` with no filter of its own, and
+  `findByCapability` does not filter by liveness, as the pages say. 98 of the 230 requests (43 %)
+  went to dead probes. This is the baseline for Q3, measured with no application filter; Q3
+  itself is not decided here.
+- **The agent id changes too.** Every replacement registered under a new agent id as well as a
+  new node id, so each restart adds a directory row. That matters for Q4 and Q5.
+- **O1 again, at start-up only.** 4 outcomes were published and never applied, all between
+  09:34:24.349 and 09:34:24.398 UTC; the alerter subscribed to `outcomes` at 09:34:24.915. The
+  alerter was not restarted in this run, so this is the start-up case already recorded in O1.

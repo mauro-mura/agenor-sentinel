@@ -1,0 +1,108 @@
+#!/usr/bin/env -S python3 -I
+"""Causes failures on purpose (CRITERION §2), chosen by a seeded random generator, and records
+each one as a CSV row: when, to which container, and which agent and node died and replaced it.
+
+    scripts/faults --regime 3 --seed 3 --count 5 --interval 120 --out faults.csv
+
+Regime 3 (death without goodbye): the JVM of a probe container is killed with SIGKILL from inside
+the container. The container runs under an init process (compose.yml, init: true), so it exits on
+its own and restart: unless-stopped brings it back, with a new agent id and a new node id.
+
+The agent id of a container is read from Agenor's lifecycle log line ("Agent lifecycle: <id>
+STARTING -> RUNNING"); its node id from the agent's row in agenor_agents, which a killed probe
+leaves behind. Standard library only; needs the docker CLI and the compose stack of this
+repository.
+"""
+
+import argparse
+import csv
+import datetime
+import random
+import re
+import subprocess
+import sys
+import time
+
+LIFECYCLE = re.compile(r"Agent lifecycle: ([0-9a-f-]{36}) STARTING -> RUNNING")
+COLUMNS = ["seed", "n", "regime", "action", "container", "victim_agent_id", "victim_node_id",
+           "killed_at", "replacement_agent_id", "replacement_node_id", "replacement_running_at"]
+
+
+def run(*args):
+    return subprocess.run(args, check=True, capture_output=True, text=True).stdout
+
+
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def probe_containers():
+    ids = run("docker", "compose", "ps", "-q", "probe").split()
+    names = [run("docker", "inspect", "-f", "{{.Name}}", i).strip().lstrip("/") for i in ids]
+    return sorted(names)
+
+
+def running_agent(container):
+    """The agent id of the latest start in the container's log, or None before the first start."""
+    logs = subprocess.run(["docker", "logs", container], capture_output=True, text=True)
+    found = LIFECYCLE.findall(logs.stdout + logs.stderr)
+    return found[-1] if found else None
+
+
+def node_of(agent_id):
+    out = run("docker", "compose", "exec", "-T", "postgres", "psql", "-U", "sentinel", "-d", "sentinel",
+              "-At", "-c", f"SELECT node_id FROM agenor_agents WHERE agent_id = '{agent_id}'")
+    return out.strip() or None
+
+
+def kill_probe(rng, seed, n, restart_timeout):
+    container = rng.choice(probe_containers())
+    victim = running_agent(container)
+    victim_node = node_of(victim) if victim else None
+    killed_at = now()
+    run("docker", "exec", container, "sh", "-c", "kill -9 $(pgrep -x java)")
+
+    replacement, replacement_node, running_at = None, None, None
+    deadline = time.monotonic() + restart_timeout
+    while time.monotonic() < deadline:
+        time.sleep(1)
+        agent = running_agent(container)
+        if agent and agent != victim:
+            replacement, running_at = agent, now()
+            replacement_node = node_of(agent)
+            break
+    if replacement is None:
+        print(f"#{n}: {container} did not come back within {restart_timeout} s", file=sys.stderr)
+    return dict(seed=seed, n=n, regime=3, action="SIGKILL probe JVM", container=container,
+                victim_agent_id=victim, victim_node_id=victim_node, killed_at=killed_at,
+                replacement_agent_id=replacement, replacement_node_id=replacement_node,
+                replacement_running_at=running_at)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--regime", type=int, choices=[3], required=True)
+    parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--count", type=int, required=True)
+    parser.add_argument("--interval", type=float, required=True, help="seconds from one fault to the next")
+    parser.add_argument("--restart-timeout", type=float, default=120)
+    parser.add_argument("--out", required=True, help="CSV file, one row per fault")
+    args = parser.parse_args()
+
+    rng = random.Random(args.seed)
+    with open(args.out, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=COLUMNS)
+        writer.writeheader()
+        for n in range(1, args.count + 1):
+            started = time.monotonic()
+            row = kill_probe(rng, args.seed, n, args.restart_timeout)
+            writer.writerow(row)
+            f.flush()
+            print(f"#{n} {row['killed_at']} {row['container']}: node {row['victim_node_id']} killed, "
+                  f"replaced by node {row['replacement_node_id']} at {row['replacement_running_at']}")
+            if n < args.count:
+                time.sleep(max(0.0, args.interval - (time.monotonic() - started)))
+
+
+if __name__ == "__main__":
+    main()

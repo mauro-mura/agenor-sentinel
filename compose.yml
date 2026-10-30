@@ -2,6 +2,12 @@
 #
 #   docker compose up -d --build --scale probe=2
 #
+# The three roles run under an init process (init: true), so the JVM is not PID 1. Regime 3 kills
+# the JVM with SIGKILL from inside the container; the container then exits on its own and
+# restart: unless-stopped brings it back with a new node id. `docker kill` would not do: the
+# runtime treats it as a manual stop and does not restart the container. The init process forwards
+# SIGTERM to the JVM, so an orderly stop (regime 2) is unchanged.
+#
 # Host ports are bound to 127.0.0.1 only: Agenor authenticates nothing between nodes
 # (adapters/redis.md, Trust model), so neither backend is exposed beyond this machine.
 
@@ -51,6 +57,7 @@ services:
       args:
         MODULE: sentinel-coordinator
     image: localhost/sentinel-coordinator:dev
+    init: true
     environment: *agenor-env
     depends_on:
       postgres:
@@ -65,6 +72,7 @@ services:
       args:
         MODULE: sentinel-alerter
     image: localhost/sentinel-alerter:dev
+    init: true
     environment:
       <<: *agenor-env
       WEBHOOK_URL: http://fixtures:8080/webhook
@@ -81,6 +89,7 @@ services:
       args:
         MODULE: sentinel-probe
     image: localhost/sentinel-probe:dev
+    init: true
     environment: *agenor-env
     depends_on:
       postgres:

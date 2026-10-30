@@ -1,0 +1,10 @@
+#!/bin/sh
+# Stops the coordinator from dispatching, without stopping the coordinator: every target's next
+# check is moved to 'infinity', so claimDue() returns nothing and the requests already in flight
+# can still be answered or time out. Stopping the coordinator instead would leave its last requests
+# with neither a reply nor an error, and the reconciliation would count them as lost.
+set -eu
+cd "$(dirname "$0")/.."
+docker compose exec -T postgres psql -U sentinel -d sentinel -v ON_ERROR_STOP=1 -q \
+    -c "UPDATE target SET next_due_at = 'infinity'"
+echo "dispatching stopped at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
