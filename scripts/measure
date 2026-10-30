@@ -7,7 +7,14 @@
 #
 # Regime 3 (probes killed without goodbye) is Q2's and lands in data/q2, as before; regimes 1
 # (scale up and down) and 2 (rolling upgrade) land in data/regime1 and data/regime2. Regime 1
-# starts from 2 probes and scales between 2 and 5, so it takes 4 faults by default.
+# starts from 2 probes and scales between 2 and 5, so it takes 4 faults by default. Regime 4 (the
+# broker restarted empty) lands in data/regime4: one restart by default, then INTERVAL seconds
+# (300 by default) to see whether the system works again.
+#
+# Throughout the run the health endpoint of every process is sampled every 15 s (scripts/health).
+# At the end the logs of the coordinator, the alerter and the probes are kept, compressed, with a
+# count of their ERROR, WARN and NOGROUP lines; a log that a later run overwrites cannot be read
+# again.
 #
 # Every target answers after DELAY_MS (3000 by default, below the probe's 5 s check timeout), so
 # that a probe that goes away at a random moment often has a check in progress: the "in flight"
@@ -22,11 +29,14 @@ case "$REGIME" in
     1) DIR=data/regime1; DEFAULT_COUNT=4; DEFAULT_PROBES=2 ;;
     2) DIR=data/regime2; DEFAULT_COUNT=5; DEFAULT_PROBES=3 ;;
     3) DIR=data/q2; DEFAULT_COUNT=5; DEFAULT_PROBES=3 ;;
-    *) echo "regime must be 1, 2 or 3" >&2; exit 2 ;;
+    4) DIR=data/regime4; DEFAULT_COUNT=1; DEFAULT_PROBES=3 ;;
+    *) echo "regime must be 1, 2, 3 or 4" >&2; exit 2 ;;
 esac
+DEFAULT_INTERVAL=120
+[ "$REGIME" = 4 ] && DEFAULT_INTERVAL=300
 SEED=${2:-3}
 COUNT=${3:-$DEFAULT_COUNT}
-INTERVAL=${4:-120}
+INTERVAL=${4:-$DEFAULT_INTERVAL}
 PROBES=${5:-$DEFAULT_PROBES}
 DELAY_MS=${6:-3000}
 WARMUP=60
@@ -54,15 +64,25 @@ for t in $(targets); do
 done
 sleep "$WARMUP"
 
+( while :; do scripts/health --csv "$OUT/health.csv" > /dev/null 2>&1; sleep 15; done ) &
+SAMPLER=$!
+trap 'kill "$SAMPLER" 2>/dev/null' EXIT
 scripts/census --csv "$OUT/census.csv"
 scripts/faults --regime "$REGIME" --seed "$SEED" --count "$COUNT" --interval "$INTERVAL" --out "$OUT/faults.csv"
 # The last probe to go away gets a full interval, like the others, before the dispatching stops.
 sleep "$INTERVAL"
 
+kill "$SAMPLER"
 scripts/quiesce | tee -a "$OUT/run.txt"
 sleep $((GRACE + 5))
 scripts/reconcile --grace "$GRACE" --csv "$OUT/ledger.csv" | tee "$OUT/reconcile.txt"
 scripts/q2-deaths "$OUT/faults.csv" "$OUT/ledger.csv" --out "$OUT/q2.csv" | tee "$OUT/q2.txt"
+scripts/timeline "$OUT/ledger.csv" "$OUT/faults.csv" --out "$OUT/timeline.csv" | tee "$OUT/timeline.txt"
 scripts/census --csv "$OUT/census.csv"
+docker compose logs --no-color coordinator alerter probe > "$OUT/logs.txt" 2>&1
+for pattern in ' ERROR ' ' WARN ' NOGROUP; do
+    echo "$pattern: $(grep -c -- "$pattern" "$OUT/logs.txt" || true)"
+done | tee "$OUT/log-counts.txt"
+gzip -9 "$OUT/logs.txt"
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/run.txt"
 echo "Results in $OUT"

@@ -34,6 +34,10 @@ services:
 
   valkey:
     image: docker.io/valkey/valkey:8.1.11-alpine3.24
+    # No persistence (CRITERION §2, regime 4): the image's default saves a snapshot on shutdown and
+    # loads it on start, so a restart would bring streams and consumer groups back. Without it, a
+    # restarted broker is empty.
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
     ports:
       - "127.0.0.1:56379:6379"
     healthcheck:
