@@ -1,0 +1,13 @@
+seed,n,regime,action,container,victim_agent_id,victim_node_id,killed_at,exit_code,stop_seconds,replacement_agent_id,replacement_node_id,replacement_running_at
+3,1,1,scale up to 5,agenor-sentinel_probe_3,,,2026-10-30T14:33:45.294Z,,,9dad1164-dc98-4951-af68-4ae77718e8d2,dc0f6f4f-1206-4807-aa4e-cc7a59f0f924,2026-10-30T14:33:53.179Z
+3,1,1,scale up to 5,agenor-sentinel_probe_4,,,2026-10-30T14:33:45.294Z,,,b37c79b1-975b-4a13-abb4-3d6c0e4905b3,335c8ccb-58d7-4a46-9958-f15a4d69ea56,2026-10-30T14:33:56.078Z
+3,1,1,scale up to 5,agenor-sentinel_probe_5,,,2026-10-30T14:33:45.294Z,,,a8309b13-49cd-4bc3-ba47-e89ffcc2e6c0,ec56807f-196b-48fe-98b9-b1064882f39d,2026-10-30T14:33:59.249Z
+3,2,1,scale down to 2,agenor-sentinel_probe_3,9dad1164-dc98-4951-af68-4ae77718e8d2,dc0f6f4f-1206-4807-aa4e-cc7a59f0f924,2026-10-30T14:35:47.616Z,143,1.3,,,
+3,2,1,scale down to 2,agenor-sentinel_probe_4,b37c79b1-975b-4a13-abb4-3d6c0e4905b3,335c8ccb-58d7-4a46-9958-f15a4d69ea56,2026-10-30T14:35:47.617Z,143,1.3,,,
+3,2,1,scale down to 2,agenor-sentinel_probe_5,a8309b13-49cd-4bc3-ba47-e89ffcc2e6c0,ec56807f-196b-48fe-98b9-b1064882f39d,2026-10-30T14:35:47.617Z,143,1.3,,,
+3,3,1,scale up to 5,agenor-sentinel_probe_3,,,2026-10-30T14:37:44.842Z,,,8ace9df8-2c32-4e78-b143-2025b599acd6,411f5a75-0e69-4fa2-b697-81d9691306a8,2026-10-30T14:37:51.319Z
+3,3,1,scale up to 5,agenor-sentinel_probe_4,,,2026-10-30T14:37:44.842Z,,,1d3ab941-b2ad-4d18-a999-d689a53cc342,46a9a688-b443-49fe-89a6-ffc252006284,2026-10-30T14:37:54.167Z
+3,3,1,scale up to 5,agenor-sentinel_probe_5,,,2026-10-30T14:37:44.842Z,,,a94c881f-2542-4f9f-b73e-9c2bd5bfb4ac,71cb243d-eeeb-49ba-960b-afcce95f169f,2026-10-30T14:37:57.138Z
+3,4,1,scale down to 2,agenor-sentinel_probe_3,8ace9df8-2c32-4e78-b143-2025b599acd6,411f5a75-0e69-4fa2-b697-81d9691306a8,2026-10-30T14:39:47.653Z,143,0.6,,,
+3,4,1,scale down to 2,agenor-sentinel_probe_4,1d3ab941-b2ad-4d18-a999-d689a53cc342,46a9a688-b443-49fe-89a6-ffc252006284,2026-10-30T14:39:47.653Z,143,1.3,,,
+3,4,1,scale down to 2,agenor-sentinel_probe_5,a94c881f-2542-4f9f-b73e-9c2bd5bfb4ac,71cb243d-eeeb-49ba-960b-afcce95f169f,2026-10-30T14:39:47.654Z,143,1.3,,,

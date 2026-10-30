@@ -108,6 +108,70 @@ Documentation gaps met on the way in are recorded first in the entry diary
   share the directory's database can run its own migrations with the settings the page gives,
   whichever process starts first.
 
+## F3. An orderly stop waits for a handler in flight, then drops its reply
+
+- **Kind:** documentation defect by the letter of CRITERION; a behavioural defect in substance.
+  Both readings are below. Which one prevails is not decided here.
+- **Version:** 0.39.0, with `agenor-spring-boot-starter` on Spring Boot 4.0.9, Java 21, Redis
+  transport, `DialogueCapability` used as the pages show (constructed in a `BaseAgent`, no manual
+  wiring).
+- **What happens:** a probe receives a REQUEST, and while its handler is running (a check that
+  takes 3 s) the process gets SIGTERM, the orderly stop every orchestrator sends. The log of one
+  reproduction (`data/f3/probe-stop.log`, 2026-10-30, the stack of the regime 1 run on commit
+  `ff6780b`):
+
+  ```
+  14:43:36.463 AgenorAutoConfiguration : Stopping AgenorRuntime...
+  14:43:36.465 LoggingLifecycleListener : Agent lifecycle: b34e025d-... RUNNING -> STOPPING
+  14:43:38.385 ERROR DialogueHandlerRegistry : @DialogueHandler onCheck failed on REQUEST from
+               coordinator: java.lang.IllegalStateException: DialogueCapability not initialized
+               for agent b34e025d-... — call initialize() from your agent's start(), or implement
+               LifecycleHooks (BaseAgent already does) for automatic wiring
+      at dev.agenor.runtime.dialogue.DialogueCapability.inform(DialogueCapability.java:511)
+      at dev.agenor.sentinel.probe.agents.ProbeAgent.onCheck(ProbeAgent.java:49)
+  14:43:38.392 WARN ConsumerLoop : Handler failed for entry 1793371415377-0 on
+               'sentinel:node:4ffd788b-...' (attempt 1/3): java.lang.IllegalStateException: ...
+  14:43:38.395 LoggingLifecycleListener : Agent lifecycle: b34e025d-... STOPPING -> STOPPED
+  ```
+
+  The stop waits for the handler: the agent reaches `STOPPED` 1.9 s after `STOPPING`, right after
+  the handler ends, well within the agent's 10 s stop timeout. But by then the dialogue capability
+  has already been shut down, so the handler's `inform` throws. The check was done and its result
+  is discarded. The entry is not acknowledged, as `adapters/redis` says for a handler that throws,
+  and it stays pending in the stream of a node id that will never be used again (Q2). The
+  coordinator sees a timeout 15 s after the send (`data/f3/ledger-row.csv`). The error message
+  blames the application's wiring, which is not the cause.
+- **How often, in the runs of Q4:** every request in flight at an orderly stop ended this way: 10
+  requests at 9 of 15 stops in regime 2, 2 requests at 2 of 6 stops in regime 1. Each was
+  delivered once and is still pending in the stopped node's stream, and none is in a `:dlq`. Those
+  runs kept no probe log, so the cause is shown by the reproduction above, and the runs agree with
+  it.
+- **What the pages say:** nothing about work in flight during an orderly stop. `agent-development`
+  says `onStop()` runs before behaviours are stopped and the agent is unregistered, and that
+  `DialogueCapability` registers itself on the agent's start and stop hooks. `dialog-protocol`
+  says `shutdown()` withdraws the capability's inbound registration, and that on a *restart*
+  in-flight conversations are lost and peers wait out their own timeouts. `adapters/redis` says
+  a restarted JVM picks up its own pending entries; under the starter no JVM restarts with the
+  same node id.
+- **Reading 1, by the letter: a documentation defect.** CRITERION §5 point 5 lists four
+  behavioural defects: a message lost without an outcome, growth without bound, a system that
+  stops silently, a page describing another configuration. None applies: the coordinator sees
+  every one of these requests fail, Q4 counts no lost request, and the ERROR is logged. What is
+  missing is a page saying what an orderly stop does to work in flight.
+- **Reading 2, in substance: a behavioural defect.** The framework contradicts itself within one
+  stop: it waits for the handler to finish, then refuses the reply the handler was written to
+  send. Waiting is pointless if the result cannot leave, and the reply could have been sent: the
+  Redis client was still open (it closes 40 ms after `STOPPED`). The consequence is that a rolling
+  upgrade, the orderly operation an orchestrator does on every release, fails every request in
+  flight, and an application cannot avoid it by anything the pages show. That is the shape of a
+  defect, even if CRITERION §5 does not name it.
+- **In memory (CRITERION §5, point 7):** not tried. The same stop order is likely to apply, since
+  the capability is shut down by the agent's own stop hook whatever the transport, but nothing
+  here shows it.
+- **Missing capability, phrased as CRITERION §5 point 3 asks:** a node stopped in an orderly way
+  either finishes the work it has accepted, outcome included, or gives it back so that someone
+  else can.
+
 ## O1. Outcomes published while the alerter is not subscribed never reach it
 
 - **Kind:** observation of documented behaviour; not a defect. To be measured under regime 3.
@@ -245,10 +309,10 @@ Two parts of Q2 stay open:
   09:34:24.349 and 09:34:24.398 UTC; the alerter subscribed to `outcomes` at 09:34:24.915. The
   alerter was not restarted in this run, so this is the start-up case already recorded in O1.
 
-## Q3. The coordinator can tell who is alive, in 12 lines; partial: regime 3 only
+## Q3. The coordinator can tell who is alive, in 12 lines
 
-- **Kind:** outcome of a question (CRITERION §4, Q3), **partial**. Regimes 1 and 2 (scale down,
-  rolling upgrade) are not measured yet, nor the cost of the extra directory reads.
+- **Kind:** outcome of a question (CRITERION §4, Q3). Written first for regime 3 alone; regimes
+  1 and 2 are at the end of this section.
 - **Version and configuration:** as in Q2: 0.39.0, the starter in all three roles, JDBC directory
   and JDBC presence, heartbeat every 15 s, staleness window left to its default, which
   `adapters/jdbc-directory` derives as three times the interval: 45 s. Same orchestrator.
@@ -323,8 +387,99 @@ is wrong in exactly the case it is written for, and nothing in `directory` or
 that the stored status of an agent that died without goodbye stays `RUNNING`. That is a gap in
 the pages whichever rule prevails.
 
-### Still to measure for Q3
+### Regimes 1 and 2: an orderly stop leaves the candidates at once
 
-- Regimes 1 and 2: probes stopped with SIGTERM. The entry diary saw a probe remove its own row on
-  an orderly stop, so the filter may have nothing to do there; it is not measured.
-- The cost: one `getStatus`, a read of `agenor_agents`, per candidate per round.
+Measured with the runs of Q4 (same commit, same filter): 15 probes replaced with SIGTERM in
+regime 2, 6 probes removed by scaling down in regime 1. A probe stopped with SIGTERM deletes its
+own row in `agenor_agents` on the way out, so `findByCapability` stops returning it at once. No
+request was sent to a probe after its stop, in either run (`q2.txt` of each run: "still chosen for
+0.0 s" on every stop). The filter has nothing to do in these regimes, and the application would
+need no line without it. What these stops do lose is in F3 and Q4, not here.
+
+So the 12 lines of the filter are needed for one case only: a process that dies without goodbye.
+
+### Not measured
+
+The cost of the filter: one `getStatus`, a read of `agenor_agents`, per candidate per round. It is
+not among Q3's deciding criteria.
+
+## Q4. A rolling upgrade loses nothing, and fails the work in flight
+
+- **Kind:** outcome of a question (CRITERION §4, Q4). No defect by Q4's rule; F3 is what it found.
+- **Version and configuration:** as in Q3: 0.39.0, the starter in all three roles, JDBC directory
+  and presence, heartbeat every 15 s, the coordinator's liveness filter on. Orderly stops are
+  `docker stop -t 30` (SIGTERM to the init process, which forwards it to the JVM), so the runtime
+  falls back to SIGKILL only after 30 s.
+- **Runs:** `scripts/measure 2` and `scripts/measure 1` with their defaults, seed 3, on commit
+  `ff6780b`, 2026-10-30:
+  - regime 2, from 14:18:47 to 14:31:57 UTC: three probes, five rolling upgrades two minutes
+    apart, each replacing every probe one at a time: 15 stops. Data:
+    `data/regime2/20261030T141847Z-seed3/`.
+  - regime 1, from 14:31:57 to 14:42:40 UTC: two probes scaled up to five and back down, twice:
+    6 stops. Data: `data/regime1/20261030T143157Z-seed3/`.
+
+### The ledger
+
+| | Regime 2 | Regime 1 |
+|---|---:|---:|
+| Requests | 241 | 195 |
+| Answered | 231 | 193 |
+| Timed out | 10 | 2 |
+| Dead-lettered | 0 | 0 |
+| In flight | 0 | 0 |
+| **Lost** | **0** | **0** |
+| Sent to a probe after its stop | 0 | 0 |
+
+Every stop ended with exit code 143, the JVM leaving on SIGTERM; no stop needed the SIGKILL
+fallback. In regime 2, the six stops of a probe with no check in flight took 0.6 to 0.7 s from the
+signal, and the nine with a check in flight took 1.2 to 3.3 s: the stop waited for the handler,
+as in F3 (`faults.csv`, `stop_seconds`). In regime 1 the containers leaving were stopped in
+parallel, and every stop took 0.6 to 1.3 s.
+
+Every one of the 12 timeouts is a request that was in flight at a stop, pending in the stopped
+node's stream, delivered once: F3.
+
+### What decides it
+
+Q4 says that with an orderly stop the ledger must have no lost entry, and that a single one is a
+defect. There is none. CRITERION §7 expected "nothing lost", and that holds.
+
+What the rule does not see: the requests in flight at a stop did not survive it either. They
+failed in a way the application sees, which is why Q4 counts them as timed out and not lost. The
+rule was written to catch a message vanishing; it does not ask whether an orderly stop costs the
+work in flight, and it does: 12 of 12. That is F3.
+
+### What an orderly stop leaves behind
+
+From `census.csv` of each run, taken after the warm-up, before the first stop, and again after
+the final ledger:
+
+| | Regime 2 before | Regime 2 after | Regime 1 before | Regime 1 after |
+|---|---:|---:|---:|---:|
+| Rows in `agenor_agents` | 5 | 5 | 4 | 4 |
+| Node streams | 5 | 20 | 4 | 10 |
+| Topic streams | 1 | 1 | 1 | 1 |
+| `:dlq` streams | 0 | 0 | 0 | 0 |
+| Consumer groups | 6 | 21 | 5 | 11 |
+| Pending entries | 0 | 10 | 2 | 2 |
+| Valkey `used_memory` (bytes) | 1,353,456 | 1,939,416 | 1,286,496 | 1,774,704 |
+
+- **Directory rows: none left behind.** A probe stopped with SIGTERM deletes its own row, so the
+  row count is back to the live processes after every stop.
+- **Streams and groups: one of each per stop, left behind.** 15 stops added 15 node streams and
+  15 consumer groups in regime 2; 6 stops added 6 of each in regime 1. Nothing removes them, and
+  no page describes their removal for a node id that is never reused. Whether that growth has a
+  bound is Q5's.
+- **Pending entries:** after the run, these are F3's requests (10 and 2). The 2 counted in regime
+  1 *before* the first stop are checks that were running at that moment: the census was taken
+  while the coordinator was dispatching.
+
+### Against CRITERION §7
+
+- **"Nothing lost": confirmed.**
+- **"Every stopped probe leaves its stream and its groups behind": confirmed.** One stream and one
+  group per stop.
+- **"And one directory row per agent if the agent's name changes on each start": refuted.** The
+  agent's id does change on every start (Q2), and an orderly stop still leaves no row: the probe
+  deletes it on the way out.
+

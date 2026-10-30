@@ -1,0 +1,3 @@
+n,victim_node_id,group,state,request_location,requests,chosen_for_seconds,last_heartbeat_to_death_seconds,last_heartbeat_to_last_request_seconds
+4,46a9a688-b443-49fe-89a6-ffc252006284,in flight at stop,TIMED_OUT,PENDING,1,0.0,,
+4,71cb243d-eeeb-49ba-960b-afcce95f169f,in flight at stop,TIMED_OUT,PENDING,1,0.0,,

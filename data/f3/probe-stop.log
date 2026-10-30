@@ -1,0 +1,98 @@
+Emulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.
+2026-10-30T14:32:15.646Z  INFO 2 --- [sentinel-probe] [           main] d.a.sentinel.probe.ProbeApplication      : Starting ProbeApplication v0.1.0-SNAPSHOT using Java 21.0.12 with PID 2 (/app/app.jar started by root in /app)
+2026-10-30T14:32:15.656Z  INFO 2 --- [sentinel-probe] [           main] d.a.sentinel.probe.ProbeApplication      : No active profile set, falling back to 1 default profile: "default"
+2026-10-30T14:32:19.401Z  INFO 2 --- [sentinel-probe] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-10-30T14:32:19.432Z  INFO 2 --- [sentinel-probe] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-10-30T14:32:19.433Z  INFO 2 --- [sentinel-probe] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.27]
+2026-10-30T14:32:19.507Z  INFO 2 --- [sentinel-probe] [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 3708 ms
+2026-10-30T14:32:21.188Z  INFO 2 --- [sentinel-probe] [           main] com.zaxxer.hikari.HikariDataSource       : agenor-directory - Starting...
+2026-10-30T14:32:21.489Z  INFO 2 --- [sentinel-probe] [           main] com.zaxxer.hikari.pool.HikariPool        : agenor-directory - Added connection org.postgresql.jdbc.PgConnection@6bce313
+2026-10-30T14:32:21.491Z  INFO 2 --- [sentinel-probe] [           main] com.zaxxer.hikari.HikariDataSource       : agenor-directory - Start completed.
+2026-10-30T14:32:21.491Z  INFO 2 --- [sentinel-probe] [           main] d.a.a.p.d.DirectorySchemaManager         : Running agent directory schema migrations from classpath:db/agenor/directory
+2026-10-30T14:32:22.034Z  INFO 2 --- [sentinel-probe] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://postgres:5432/sentinel (PostgreSQL 16.15)
+2026-10-30T14:32:22.126Z  INFO 2 --- [sentinel-probe] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 1 migration (execution time 00:00.053s)
+2026-10-30T14:32:22.164Z  INFO 2 --- [sentinel-probe] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 1
+2026-10-30T14:32:22.172Z  INFO 2 --- [sentinel-probe] [           main] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-30T14:32:22.186Z  INFO 2 --- [sentinel-probe] [           main] d.a.a.p.d.DirectorySchemaManager         : Agent directory migrations applied: 0
+2026-10-30T14:32:23.967Z  INFO 2 --- [sentinel-probe] [           main] d.a.a.messaging.redis.RedisStreamClient  : Redis messaging client connected to redis://valkey:6379
+2026-10-30T14:32:24.027Z  INFO 2 --- [sentinel-probe] [           main] dev.agenor.runtime.AgenorRuntime         : Using provided configuration: sentinel-probe
+2026-10-30T14:32:24.600Z  INFO 2 --- [sentinel-probe] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-30T14:32:24.968Z  INFO 2 --- [sentinel-probe] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-10-30T14:32:24.971Z  INFO 2 --- [sentinel-probe] [           main] d.a.a.AgenorAutoConfiguration            : Starting AgenorRuntime...
+2026-10-30T14:32:24.972Z  INFO 2 --- [sentinel-probe] [           main] dev.agenor.runtime.AgenorRuntime         : Starting Agenor Runtime...
+2026-10-30T14:32:24.987Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] d.a.r.scheduler.SimpleBehaviorScheduler  : Starting behavior scheduler
+2026-10-30T14:32:24.988Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] dev.agenor.runtime.AgenorRuntime         : Starting agent discovery in 1 packages
+2026-10-30T14:32:24.992Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] d.agenor.runtime.discovery.AgentScanner  : Discovered agent class: dev.agenor.sentinel.probe.agents.ProbeAgent
+2026-10-30T14:32:24.992Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] d.agenor.runtime.discovery.AgentScanner  : Agent discovery completed. Found 1 agent classes
+2026-10-30T14:32:25.217Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] d.agenor.runtime.discovery.AgentFactory  : Created agent: b34e025d-ac12-4bae-b40f-0c91ed599069 from class: ProbeAgent
+2026-10-30T14:32:25.233Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] dev.agenor.runtime.AgenorRuntime         : Registered agent: b34e025d-ac12-4bae-b40f-0c91ed599069 (b34e025d-ac12-4bae-b40f-0c91ed599069) in runtime and directory
+2026-10-30T14:32:25.234Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] dev.agenor.runtime.AgenorRuntime         : Agent discovery completed. Created 1 agents from 1 classes
+2026-10-30T14:32:25.234Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] dev.agenor.runtime.AgenorRuntime         : Optional modules — registration extensions: none; agent discovery: DefaultAgentDiscoveryEngine; HITL support: absent; LLM memory: absent; ext behaviors: absent
+2026-10-30T14:32:25.235Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] dev.agenor.runtime.AgenorRuntime         : Processing annotations for 1 agents
+2026-10-30T14:32:25.260Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] dev.agenor.runtime.AgenorRuntime         : Annotation processing completed
+2026-10-30T14:32:25.260Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] d.a.runtime.lifecycle.LifecycleManager   : Starting agent: b34e025d-ac12-4bae-b40f-0c91ed599069 with timeout: PT30S
+2026-10-30T14:32:25.261Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] d.a.r.l.LoggingLifecycleListener         : Agent lifecycle: b34e025d-ac12-4bae-b40f-0c91ed599069 null -> STARTING
+2026-10-30T14:32:25.261Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] d.a.sentinel.probe.agents.ProbeAgent     : Starting agent: b34e025d-ac12-4bae-b40f-0c91ed599069 (b34e025d-ac12-4bae-b40f-0c91ed599069)
+2026-10-30T14:32:25.392Z  INFO 2 --- [sentinel-probe] [onPool-worker-2] d.a.runtime.dialogue.DialogueCapability  : Dialogue capability initialized for agent b34e025d-ac12-4bae-b40f-0c91ed599069 with 1 handlers
+2026-10-30T14:32:25.393Z  INFO 2 --- [sentinel-probe] [onPool-worker-2] d.a.sentinel.probe.agents.ProbeAgent     : Agent started successfully: b34e025d-ac12-4bae-b40f-0c91ed599069 (b34e025d-ac12-4bae-b40f-0c91ed599069)
+2026-10-30T14:32:25.393Z  INFO 2 --- [sentinel-probe] [onPool-worker-2] d.a.r.l.LoggingLifecycleListener         : Agent lifecycle: b34e025d-ac12-4bae-b40f-0c91ed599069 STARTING -> RUNNING
+2026-10-30T14:32:25.393Z  INFO 2 --- [sentinel-probe] [onPool-worker-2] d.a.runtime.lifecycle.LifecycleManager   : Agent started successfully: b34e025d-ac12-4bae-b40f-0c91ed599069
+2026-10-30T14:32:25.412Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] d.a.r.directory.AgentHeartbeatDriver     : Agent heartbeat driver started, interval PT15S
+2026-10-30T14:32:25.412Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] dev.agenor.runtime.AgenorRuntime         : Agenor Runtime started successfully with 1 agents
+2026-10-30T14:32:25.412Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] dev.agenor.runtime.AgenorRuntime         : Agent Summary:
+2026-10-30T14:32:25.436Z  INFO 2 --- [sentinel-probe] [onPool-worker-1] dev.agenor.runtime.AgenorRuntime         :   - b34e025d-ac12-4bae-b40f-0c91ed599069 (b34e025d-ac12-4bae-b40f-0c91ed599069) - Type: probe, Capabilities: [probe], Running: true
+2026-10-30T14:32:25.437Z  INFO 2 --- [sentinel-probe] [           main] d.a.a.AgenorAutoConfiguration            : AgenorRuntime started
+2026-10-30T14:32:25.462Z  INFO 2 --- [sentinel-probe] [           main] d.a.sentinel.probe.ProbeApplication      : Started ProbeApplication in 10.911 seconds (process running for 11.609)
+2026-10-30T14:43:36.463Z  INFO 2 --- [sentinel-probe] [ionShutdownHook] d.a.a.AgenorAutoConfiguration            : Stopping AgenorRuntime...
+2026-10-30T14:43:36.464Z  INFO 2 --- [sentinel-probe] [ionShutdownHook] dev.agenor.runtime.AgenorRuntime         : Stopping Agenor Runtime...
+2026-10-30T14:43:36.465Z  INFO 2 --- [sentinel-probe] [onPool-worker-4] d.a.runtime.lifecycle.LifecycleManager   : Stopping agent: b34e025d-ac12-4bae-b40f-0c91ed599069 with timeout: PT10S
+2026-10-30T14:43:36.465Z  INFO 2 --- [sentinel-probe] [onPool-worker-4] d.a.r.l.LoggingLifecycleListener         : Agent lifecycle: b34e025d-ac12-4bae-b40f-0c91ed599069 RUNNING -> STOPPING
+2026-10-30T14:43:36.466Z  INFO 2 --- [sentinel-probe] [onPool-worker-4] d.a.sentinel.probe.agents.ProbeAgent     : Stopping agent: b34e025d-ac12-4bae-b40f-0c91ed599069 (b34e025d-ac12-4bae-b40f-0c91ed599069)
+2026-10-30T14:43:38.385Z ERROR 2 --- [sentinel-probe] [    virtual-376] d.a.r.dialogue.DialogueHandlerRegistry   : @DialogueHandler onCheck failed on REQUEST from coordinator: java.lang.IllegalStateException: DialogueCapability not initialized for agent b34e025d-ac12-4bae-b40f-0c91ed599069 — call initialize() from your agent's start(), or implement LifecycleHooks (BaseAgent already does) for automatic wiring
+
+java.lang.IllegalStateException: DialogueCapability not initialized for agent b34e025d-ac12-4bae-b40f-0c91ed599069 — call initialize() from your agent's start(), or implement LifecycleHooks (BaseAgent already does) for automatic wiring
+	at dev.agenor.runtime.dialogue.DialogueCapability.requireInitialized(DialogueCapability.java:255) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.runtime.dialogue.DialogueCapability.reply(DialogueCapability.java:483) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.runtime.dialogue.DialogueCapability.inform(DialogueCapability.java:511) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.sentinel.probe.agents.ProbeAgent.onCheck(ProbeAgent.java:49) ~[app.jar:0.1.0-SNAPSHOT]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at dev.agenor.runtime.dialogue.DialogueHandlerRegistry.lambda$registerHandler$2(DialogueHandlerRegistry.java:96) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.runtime.dialogue.DialogueHandlerRegistry.dispatch(DialogueHandlerRegistry.java:162) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.runtime.dialogue.DialogueCapability.handleIncomingMessage(DialogueCapability.java:399) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.core.MessageHandler.lambda$sync$0(MessageHandler.java:276) ~[agenor-core-0.39.0.jar:na]
+	at dev.agenor.runtime.mailbox.DefaultAgentMailbox.lambda$route$2(DefaultAgentMailbox.java:269) ~[agenor-runtime-0.39.0.jar:na]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+
+2026-10-30T14:43:38.390Z ERROR 2 --- [sentinel-probe] [    virtual-376] d.a.runtime.mailbox.DefaultAgentMailbox  : Handler failed for message 872e289b-31d8-4bd0-b85d-cb5641a300fb on agent 'b34e025d-ac12-4bae-b40f-0c91ed599069': java.lang.IllegalStateException: DialogueCapability not initialized for agent b34e025d-ac12-4bae-b40f-0c91ed599069 — call initialize() from your agent's start(), or implement LifecycleHooks (BaseAgent already does) for automatic wiring
+
+java.util.concurrent.CompletionException: java.lang.IllegalStateException: DialogueCapability not initialized for agent b34e025d-ac12-4bae-b40f-0c91ed599069 — call initialize() from your agent's start(), or implement LifecycleHooks (BaseAgent already does) for automatic wiring
+	at java.base/java.util.concurrent.CompletableFuture.reportJoin(Unknown Source) ~[na:na]
+	at java.base/java.util.concurrent.CompletableFuture.join(Unknown Source) ~[na:na]
+	at dev.agenor.runtime.mailbox.DefaultAgentMailbox.lambda$route$2(DefaultAgentMailbox.java:269) ~[agenor-runtime-0.39.0.jar:na]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: java.lang.IllegalStateException: DialogueCapability not initialized for agent b34e025d-ac12-4bae-b40f-0c91ed599069 — call initialize() from your agent's start(), or implement LifecycleHooks (BaseAgent already does) for automatic wiring
+	at dev.agenor.runtime.dialogue.DialogueCapability.requireInitialized(DialogueCapability.java:255) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.runtime.dialogue.DialogueCapability.reply(DialogueCapability.java:483) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.runtime.dialogue.DialogueCapability.inform(DialogueCapability.java:511) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.sentinel.probe.agents.ProbeAgent.onCheck(ProbeAgent.java:49) ~[app.jar:0.1.0-SNAPSHOT]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at dev.agenor.runtime.dialogue.DialogueHandlerRegistry.lambda$registerHandler$2(DialogueHandlerRegistry.java:96) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.runtime.dialogue.DialogueHandlerRegistry.dispatch(DialogueHandlerRegistry.java:162) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.runtime.dialogue.DialogueCapability.handleIncomingMessage(DialogueCapability.java:399) ~[agenor-runtime-0.39.0.jar:na]
+	at dev.agenor.core.MessageHandler.lambda$sync$0(MessageHandler.java:276) ~[agenor-core-0.39.0.jar:na]
+	... 2 common frames omitted
+
+2026-10-30T14:43:38.392Z  WARN 2 --- [sentinel-probe] [     virtual-88] d.a.a.messaging.redis.ConsumerLoop       : Handler failed for entry 1793371415377-0 on 'sentinel:node:4ffd788b-9685-4a23-bdfc-de2086ad6521' (attempt 1/3): java.lang.IllegalStateException: DialogueCapability not initialized for agent b34e025d-ac12-4bae-b40f-0c91ed599069 — call initialize() from your agent's start(), or implement LifecycleHooks (BaseAgent already does) for automatic wiring
+2026-10-30T14:43:38.395Z  INFO 2 --- [sentinel-probe] [onPool-worker-5] d.a.sentinel.probe.agents.ProbeAgent     : Agent stopped successfully: b34e025d-ac12-4bae-b40f-0c91ed599069 (b34e025d-ac12-4bae-b40f-0c91ed599069)
+2026-10-30T14:43:38.395Z  INFO 2 --- [sentinel-probe] [onPool-worker-5] d.a.r.l.LoggingLifecycleListener         : Agent lifecycle: b34e025d-ac12-4bae-b40f-0c91ed599069 STOPPING -> STOPPED
+2026-10-30T14:43:38.395Z  INFO 2 --- [sentinel-probe] [onPool-worker-5] d.a.runtime.lifecycle.LifecycleManager   : Agent stopped successfully: b34e025d-ac12-4bae-b40f-0c91ed599069
+2026-10-30T14:43:38.397Z  INFO 2 --- [sentinel-probe] [onPool-worker-4] d.a.r.scheduler.SimpleBehaviorScheduler  : Stopping behavior scheduler
+2026-10-30T14:43:38.399Z  INFO 2 --- [sentinel-probe] [onPool-worker-4] dev.agenor.runtime.AgenorRuntime         : Agenor Runtime stopped successfully
+2026-10-30T14:43:38.400Z  INFO 2 --- [sentinel-probe] [ionShutdownHook] d.a.a.AgenorAutoConfiguration            : AgenorRuntime stopped
+2026-10-30T14:43:38.401Z  INFO 2 --- [sentinel-probe] [ionShutdownHook] o.s.boot.tomcat.GracefulShutdown         : Commencing graceful shutdown. Waiting for active requests to complete
+2026-10-30T14:43:38.404Z  INFO 2 --- [sentinel-probe] [tomcat-shutdown] o.s.boot.tomcat.GracefulShutdown         : Graceful shutdown complete
+2026-10-30T14:43:38.436Z  INFO 2 --- [sentinel-probe] [ionShutdownHook] d.a.a.messaging.redis.RedisStreamClient  : Redis messaging client closed
+2026-10-30T14:43:38.436Z  INFO 2 --- [sentinel-probe] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : agenor-directory - Shutdown initiated...
+2026-10-30T14:43:38.440Z  INFO 2 --- [sentinel-probe] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : agenor-directory - Shutdown completed.
