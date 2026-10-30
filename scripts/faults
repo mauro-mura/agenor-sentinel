@@ -18,6 +18,12 @@ Regime 3 (death without goodbye): the JVM of a probe container is killed with SI
 the container. The container runs under an init process (compose.yml, init: true), so it exits on
 its own and restart: unless-stopped brings it back, with a new agent id and a new node id.
 
+Regime 4 (the broker comes back empty): Valkey is stopped, left down for --down seconds (10 by
+default), and started again. compose.yml runs it with no persistence, so it starts with no keys:
+no streams, no consumer groups. The row records when it was stopped (killed_at), when it answered
+PING again (replacement_running_at), and how many keys it loaded on start (broker_keys_loaded,
+from INFO persistence), which must be 0 for the fault to be the one CRITERION §2 describes.
+
 An orderly stop waits up to --stop-timeout seconds (30 by default, more than the agent's own 10 s
 stop timeout) before the container runtime falls back to SIGKILL. The container's exit code is
 recorded: 143 is the JVM leaving on SIGTERM, 137 a SIGKILL. killed_at is when the signal was sent,
@@ -42,7 +48,7 @@ import time
 LIFECYCLE = re.compile(r"Agent lifecycle: ([0-9a-f-]{36}) STARTING -> RUNNING")
 COLUMNS = ["seed", "n", "regime", "action", "container", "victim_agent_id", "victim_node_id",
            "killed_at", "exit_code", "stop_seconds", "replacement_agent_id", "replacement_node_id",
-           "replacement_running_at"]
+           "replacement_running_at", "broker_keys_loaded"]
 
 
 def run(*args):
@@ -139,6 +145,29 @@ def scale(rng, seed, n, args):
                  exit_code=stops[c][1], stop_seconds=stops[c][2]) for c in leaving]
 
 
+def restart_broker(rng, seed, n, args):
+    killed_at, started = now(), time.monotonic()
+    run("docker", "compose", "stop", "valkey")
+    took = f"{time.monotonic() - started:.1f}"
+    code = run("docker", "inspect", "-f", "{{.State.ExitCode}}", run("docker", "compose", "ps", "-q", "valkey").strip()).strip()
+    time.sleep(args.down)
+    run("docker", "compose", "start", "valkey")
+    running_at, loaded = None, None
+    deadline = time.monotonic() + args.restart_timeout
+    while time.monotonic() < deadline:
+        ping = subprocess.run(["docker", "compose", "exec", "-T", "valkey", "valkey-cli", "PING"],
+                              capture_output=True, text=True)
+        if ping.stdout.strip() == "PONG":
+            running_at = now()
+            info = run("docker", "compose", "exec", "-T", "valkey", "valkey-cli", "INFO", "persistence")
+            loaded = next(l.split(":")[1].strip() for l in info.splitlines() if l.startswith("rdb_last_load_keys_loaded:"))
+            break
+        time.sleep(0.2)
+    return [dict(seed=seed, n=n, regime=4, action=f"valkey stopped, down {args.down:g} s, started",
+                 container="valkey", killed_at=killed_at, exit_code=code, stop_seconds=took,
+                 replacement_running_at=running_at, broker_keys_loaded=loaded)]
+
+
 def kill_probe(rng, seed, n, args):
     container = rng.choice(probe_containers())
     victim = running_agent(container)
@@ -156,12 +185,13 @@ def kill_probe(rng, seed, n, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--regime", type=int, choices=[1, 2, 3], required=True)
+    parser.add_argument("--regime", type=int, choices=[1, 2, 3, 4], required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--count", type=int, required=True)
     parser.add_argument("--interval", type=float, required=True, help="seconds from one fault to the next")
     parser.add_argument("--restart-timeout", type=float, default=120)
     parser.add_argument("--stop-timeout", type=float, default=30, help="regimes 1 and 2")
+    parser.add_argument("--down", type=float, default=10, help="regime 4: seconds the broker stays down")
     parser.add_argument("--low", type=int, default=2, help="regime 1: probes after scaling down")
     parser.add_argument("--high", type=int, default=5, help="regime 1: probes after scaling up")
     parser.add_argument("--out", required=True, help="CSV file, one row per fault")
@@ -173,7 +203,7 @@ def main():
         writer.writeheader()
         for n in range(1, args.count + 1):
             started = time.monotonic()
-            fault = {1: scale, 2: rolling_upgrade, 3: kill_probe}[args.regime]
+            fault = {1: scale, 2: rolling_upgrade, 3: kill_probe, 4: restart_broker}[args.regime]
             for row in fault(rng, args.seed, n, args):
                 writer.writerow(row)
                 f.flush()

@@ -1,0 +1,77 @@
+#!/usr/bin/env -S python3 -I
+"""What each process of the monitor says about itself: one CSV row per container, from its Spring
+Boot actuator health endpoint.
+
+    scripts/health [--csv FILE]
+
+Q7 asks whether the application sees a broker that came back empty: an error, a crashed state, a
+health check (CRITERION §4). This is the health check an orchestrator would read. For every
+running coordinator, alerter and probe container it records the overall status, the status of
+the Agenor component the starter registers, and that component's agents.total and
+agents.running.
+
+The ports are not published, so the endpoint is read from inside each container with busybox
+wget. Spring answers 503 for DOWN and OUT_OF_SERVICE, and busybox wget prints no body on an
+error status, so a 503 is recorded as status DOWN with the component columns empty.
+With --csv the rows are appended, with a header if the file is new; they are printed either way.
+Standard library only; needs the docker CLI and the compose stack of this repository.
+"""
+
+import argparse
+import csv
+import datetime
+import json
+import os
+import subprocess
+
+URL = "http://127.0.0.1:8080/actuator/health"
+COLUMNS = ["at", "container", "status", "agenor_status", "agents_total", "agents_running", "error"]
+
+
+def containers():
+    names = []
+    for service in ("coordinator", "alerter", "probe"):
+        ids = subprocess.run(["docker", "compose", "ps", "-q", service], capture_output=True,
+                             text=True).stdout.split()
+        for i in ids:
+            name, running = subprocess.run(["docker", "inspect", "-f", "{{.Name}} {{.State.Running}}", i],
+                                           capture_output=True, text=True).stdout.split()
+            if running == "true":
+                names.append(name.lstrip("/"))
+    return sorted(names)
+
+
+def health(container):
+    result = subprocess.run(["docker", "exec", container, "busybox", "wget", "-qO-", "-T", "5", URL],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        error = " ".join((result.stderr or "").split())
+        status = "DOWN" if "503" in error else "UNREACHABLE"
+        return dict(status=status, error=error)
+    body = json.loads(result.stdout)
+    agenor = body.get("components", {}).get("Agenor", {})
+    details = agenor.get("details", {})
+    return dict(status=body.get("status"), agenor_status=agenor.get("status"),
+                agents_total=details.get("agents.total"), agents_running=details.get("agents.running"))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--csv", help="append the rows to this CSV file")
+    args = parser.parse_args()
+
+    at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    rows = [dict(at=at, container=c, **health(c)) for c in containers()]
+    if args.csv:
+        new = not os.path.exists(args.csv) or os.path.getsize(args.csv) == 0
+        with open(args.csv, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=COLUMNS)
+            if new:
+                writer.writeheader()
+            writer.writerows(rows)
+    for row in rows:
+        print(" ".join(f"{k}={row.get(k, '')}" for k in COLUMNS))
+
+
+if __name__ == "__main__":
+    main()

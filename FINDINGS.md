@@ -172,6 +172,126 @@ Documentation gaps met on the way in are recorded first in the entry diary
   either finishes the work it has accepted, outcome included, or gives it back so that someone
   else can.
 
+## F4. A broker that comes back at a new address is never reached again, and health stays UP
+
+- **Kind:** behavioural defect for the part that is silent; the cause of the part that does not
+  reconnect is not established. Details below.
+- **Version:** 0.39.0, with `agenor-spring-boot-starter` on Spring Boot 4.0.9, Java 21, Redis
+  transport on Valkey 8.1.11. The images carry `lettuce-core` 7.5.1 and `netty-resolver-dns`
+  4.2.19 (in `/app/lib`, as the starter brings them).
+- **Orchestrator:** podman 4.9.3 behind the Docker CLI, docker-compose 1.29.2. Podman gives a
+  container a new IP address on every start; that is what this finding depends on.
+- **Run:** `scripts/measure 4` with its defaults, on commit `23d14de`, 2026-10-30 from 14:58:00 to
+  15:05:46 UTC: three probes, Valkey stopped at 14:59:37.478, down 10 s, answering PING again at
+  14:59:55.242 with 0 keys loaded. Data: `data/regime4/20261030T145800Z-seed3/`.
+- **What happens:** Valkey came back at 10.89.3.71; before the stop it was at 10.89.3.63. Every
+  process kept reconnecting to the old address until the end of the run. In the log of the run,
+  all 211 `Cannot reconnect` lines of Lettuce's `ConnectionWatchdog`, from the five processes,
+  name 10.89.3.63:
+
+  ```
+  Reconnecting, last destination was valkey.dns.podman/10.89.3.63:6379
+  Cannot reconnect to [valkey/<unresolved>:6379]: Host is unreachable: valkey.dns.podman/10.89.3.63:6379
+  ```
+
+  The name is resolved again on each attempt (`<unresolved>`), but to the old address. Podman's
+  DNS is not the cause: checked by hand after the run, `getent hosts valkey` inside a probe gave
+  the new address within a second of a second restart, while the processes, 8 minutes after the
+  first, were still trying 10.89.3.63. The stale address is held inside each JVM. Whether by
+  Netty's DNS resolver cache, by Lettuce, or by how Agenor builds its Lettuce client is not
+  established: finding out means reading source, which this example does not do without asking.
+- **What the application sees:** nothing that says the system stopped.
+
+  | Requests sent | 14:58:27–14:59:27 | 14:59:27–14:59:57, the stop | 14:59:57–15:04:57 |
+  |---|---:|---:|---:|
+  | Answered | 22 | 5 | 0 |
+  | Timed out | 0 | 4 | 104 |
+
+  (`timeline.txt`, 30 s slices by the time each request was sent). Every
+  health sample after the stop, 75 of them, 15 per process, reads `UP`, with the Agenor component
+  `UP` and `agents.running: 1` (`health.csv`). The logs hold no ERROR line: Lettuce's reconnect
+  failures, the consumer loops' "Transient error ... Command timed out after 1 minute(s)", and the
+  coordinator's own timeouts are all WARN (`log-counts.txt`: 0 ERROR, 372 WARN).
+- **What the pages say:** `adapters/redis` says that on reconnect (Lettuce auto-reconnect) the
+  consumer loop resumes from the last acknowledged id and that no message is lost. It does not
+  say what happens when the broker's address changes. `spring-boot-starter` says the health
+  endpoint "reflects the true state of the runtime"; it reports agents only, and nothing about
+  the broker.
+- **Why the silent part is a defect:** CRITERION §5 point 5 names "a system that stops working
+  silently", and §4 Q7 adds that it is a defect even if no page promises otherwise. For five
+  minutes no request was answered, and the only health check an orchestrator could read said UP.
+  Whatever the cause of the stale address, a node that cannot reach its transport reports itself
+  healthy.
+- **Why the rest is not classified:** a client that never follows a changed address is a defect
+  of someone, but not necessarily of Agenor, and it may not happen where a restarted broker keeps
+  its address (Docker often reassigns the same one; a Kubernetes pod that is recreated never
+  does). It is recorded as observed.
+- **In memory (CRITERION §5, point 7):** the case does not exist; there is no broker.
+- **What this example does:** Q7 asks what happens when the broker comes back *empty*, which this
+  run could not show, since no process reached it. `compose.yml` now gives Valkey a fixed address,
+  so that a restart brings it back where the processes look for it, and regime 4 is measured
+  again. That isolates Q7's variable; it is not a fix, and it is marked `@friction F4`.
+- **Missing capability, phrased as CRITERION §5 point 3 asks:** a node that cannot reach its
+  transport says so where an orchestrator looks; and a node reaches a broker that has come back,
+  wherever it has come back.
+
+## F5. A broker that comes back empty stops every consumer loop, for good, and health stays UP
+
+- **Kind:** behavioural defect: "a system that stops working silently" (CRITERION §5 point 5;
+  §4 Q7 says it is one even if no page promises otherwise).
+- **Version:** 0.39.0, with `agenor-spring-boot-starter` on Spring Boot 4.0.9, Java 21, Redis
+  transport on Valkey 8.1.11 with no persistence (`--save "" --appendonly no`), at a fixed address
+  (F4). Same orchestrator.
+- **Run:** `scripts/measure 4` with its defaults, on commit `f461f48`, 2026-10-30 from 15:21:07 to
+  15:28:53 UTC. Valkey stopped at 15:22:42.922, down 10 s, answering PING at 15:23:00.675 with 0
+  keys loaded. Data: `data/regime4/20261030T152107Z-seed3/`.
+- **What happens:** every process reconnects, between 15:23:26 and 15:23:37 (Lettuce's
+  `Reconnected to valkey/<unresolved>:6379`). From then on every consumer loop, the node stream of
+  each of the five processes and the alerter's subscription to `outcomes`, fails once a second
+  until the end of the run:
+
+  ```
+  WARN ConsumerLoop : Transient error in consumer loop for 'sentinel:node:24bf7103-...':
+       NOGROUP No such key 'sentinel:node:24bf7103-...' or consumer group 'sentinel:cg:node'
+       in XREADGROUP with GROUP option
+  ```
+
+  The first such line is at 15:23:35.273, the last at 15:28:52.801: 1915 in all
+  (`log-counts.txt`). No loop recreates its group; no line of the logs says one did. The node
+  groups are created once, when the factory is built (`adapters/redis`: "when
+  `RedisMessagingFactory.build()` constructs the transport"), and the topic group once, when the
+  subscription is made, so nothing in a running process creates them again.
+
+  Sending still works, which keeps the failure out of sight: the coordinator's `XADD` to a probe's
+  stream recreates the stream, with no group, and the send succeeds. At the end Valkey held 3 node
+  streams with 108 entries and no consumer group at all (`census.csv`); the reconciliation finds
+  every unanswered request in a stream with no group (`NO_GROUP`).
+- **What the application sees:**
+
+  | Requests sent | 15:21:33–15:22:33 | 15:22:33–15:23:03, the stop | 15:23:03–15:28:03 |
+  |---|---:|---:|---:|
+  | Answered | 22 | 5 | 0 |
+  | Timed out | 0 | 6 | 102 |
+
+  (`timeline.txt`). No outcome reached the alerter after the stop, so no alert could be raised,
+  for a target going down or coming back. Every one of the 75 health samples taken after the stop
+  reads `UP`, with the Agenor component `UP` and `agents.running: 1` (`health.csv`). The logs hold
+  no ERROR line (`log-counts.txt`): the loops call the failure "transient", at WARN, forever.
+- **What the pages say:** `adapters/redis` promises durability "with AOF/RDB", so losing the data
+  of a broker with no persistence is not a defect by itself. It says that on reconnect the loop
+  "resumes reading from the last acknowledged ID" and that "no messages are lost; pending entries
+  are claimed on the next iteration". It does not say what a loop does when its group is gone, and
+  `spring-boot-starter` does not say when the health indicator reports anything other than UP.
+- **Against the job dispatcher's case:** that example stopped Valkey for 10 s with its data
+  intact, and the system resumed. The difference here is only that the data, groups included, did
+  not come back.
+- **In memory (CRITERION §5, point 7):** the case does not exist; there is no broker to lose.
+- **What this example does:** nothing. Every process would have to be restarted for the groups to
+  be created again; an orchestrator does that only for a process whose health says so, and here it
+  says UP. The example waits for the release that fixes this (CRITERION §5, point 8).
+- **Missing capability, phrased as CRITERION §5 point 3 asks:** a node whose broker has lost its
+  consumer groups either reads again or says, where an orchestrator looks, that it cannot.
+
 ## O1. Outcomes published while the alerter is not subscribed never reach it
 
 - **Kind:** observation of documented behaviour; not a defect. To be measured under regime 3.
@@ -483,3 +603,35 @@ the final ledger:
   agent's id does change on every start (Q2), and an orderly stop still leaves no row: the probe
   deletes it on the way out.
 
+## Q7. The broker comes back empty: the system stops, and does not notice
+
+- **Kind:** outcome of a question (CRITERION §4, Q7). It found F5.
+- **Run:** the second run of regime 4, with Valkey at a fixed address (F5 gives the data). The
+  first run of regime 4 could not answer Q7: no process reached the restarted broker at all (F4).
+
+### What decides it
+
+Q7 asks two things.
+
+- **Do the consumer loops recreate their groups, or fail with `NOGROUP` forever?** They fail
+  with `NOGROUP` forever: once a second per loop, for the 5 minutes and 17 seconds from the first
+  failure to the end of the run, with no group ever created again.
+- **If they fail, does the application see it: an error, a crashed state, a health check?** No.
+  The failures are logged at WARN as transient; no ERROR is logged; the agents stay `RUNNING`; the
+  health endpoint of every process answers UP throughout. The application's only sign is its own
+  requests timing out, all of them, which an application that sends nothing it waits for would not
+  have either.
+
+So the system stops working silently, which Q7 calls a defect even if no page promises otherwise:
+F5.
+
+### Against CRITERION §7
+
+- **Q7: "unknown."** The outcome is the worse of the two the question names.
+
+### What it adds to F4
+
+Both regime 4 runs ended the same way for the application: no request answered after the stop,
+health UP. In the first the broker could not be reached; in the second it was reached and could
+not be read. A node of this stack has no way, today, to tell an orchestrator that its transport is
+not working, whatever the reason.

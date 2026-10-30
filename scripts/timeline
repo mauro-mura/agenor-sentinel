@@ -1,0 +1,81 @@
+#!/usr/bin/env -S python3 -I
+"""The ledger over time: for each slice of the run, how the requests sent in it ended.
+
+    scripts/timeline ledger.csv [faults.csv] [--slice SECONDS] [--out timeline.csv]
+
+Q7 asks whether the system works again after the broker comes back empty, or stops (CRITERION
+§4). A ledger total cannot say that; this does. Requests are grouped by when they were sent, in
+slices of 30 s by default, and counted by final state, together with what became of the outcomes
+of the answered ones (APPLIED by the alerter or not). With a faults CSV (scripts/faults), the
+slice in which each fault started is marked.
+
+Standard library only.
+"""
+
+import argparse
+import collections
+import csv
+import datetime
+
+STATES = ["ANSWERED", "TIMED_OUT", "DEAD_LETTERED", "IN_FLIGHT", "LOST"]
+
+
+def instant(text):
+    value = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    return value if value.tzinfo else value.replace(tzinfo=datetime.timezone.utc)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("ledger")
+    parser.add_argument("faults", nargs="?")
+    parser.add_argument("--slice", type=int, default=30, help="seconds")
+    parser.add_argument("--out", help="CSV file, one row per slice")
+    args = parser.parse_args()
+
+    with open(args.ledger, newline="") as f:
+        ledger = list(csv.DictReader(f))
+    faults = []
+    if args.faults:
+        with open(args.faults, newline="") as f:
+            faults = list(csv.DictReader(f))
+    if not ledger:
+        print("empty ledger")
+        return
+
+    start = min(instant(r["created_at"]) for r in ledger)
+
+    def slice_of(moment):
+        return int((moment - start).total_seconds() // args.slice)
+
+    counts = collections.defaultdict(collections.Counter)
+    for row in ledger:
+        n = slice_of(instant(row["created_at"]))
+        counts[n]["SENT"] += 1
+        counts[n][row["state"]] += 1
+        if row["outcome"] == "APPLIED":
+            counts[n]["APPLIED"] += 1
+    marks = collections.defaultdict(list)
+    for fault in faults:
+        marks[slice_of(instant(fault["killed_at"]))].append(f"#{fault['n']} {fault['action']}")
+
+    header = ["slice_start", "sent", *[s.lower() for s in STATES], "outcomes_applied", "faults"]
+    rows = []
+    for n in range(min(counts), max(counts) + 1):
+        c = counts[n]
+        rows.append([(start + datetime.timedelta(seconds=n * args.slice)).strftime("%H:%M:%S"), c["SENT"],
+                     *[c[s] for s in STATES], c["APPLIED"], "; ".join(marks.get(n, []))])
+
+    print(f"Requests by the {args.slice} s slice they were sent in (UTC)")
+    print(f"  {'slice':<9} {'sent':>5} {'answ':>5} {'t/out':>5} {'dlq':>5} {'fly':>5} {'lost':>5} {'appl':>5}  fault")
+    for r in rows:
+        print(f"  {r[0]:<9} " + " ".join(f"{v:>5}" for v in r[1:8]) + (f"  {r[8]}" if r[8] else ""))
+    if args.out:
+        with open(args.out, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerows(rows)
+
+
+if __name__ == "__main__":
+    main()
