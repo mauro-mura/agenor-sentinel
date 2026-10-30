@@ -46,7 +46,24 @@ public class ProbeAgent extends BaseAgent {
             dialogue.failure(request, "unreadable check request: " + e.getMessage());
             return;
         }
+        poison(check);
         dialogue.inform(request, check(check));
+    }
+
+    /**
+     * The poison targets of Q6 (CRITERION §4). A check of {@code /t/poison-exit} terminates this
+     * process with {@code System.exit}, a fault that is not an exception; a check of
+     * {@code /t/poison-throw} fails the handler with an exception, the case {@code adapters/redis}
+     * documents. The poison is in the request, not in the target's answer, so every delivery of the
+     * same request does the same thing again.
+     */
+    private static void poison(CheckRequest check) {
+        if (check.url().endsWith("/t/poison-exit")) {
+            System.exit(1);
+        }
+        if (check.url().endsWith("/t/poison-throw")) {
+            throw new IllegalStateException("poison target " + check.url());
+        }
     }
 
     CheckOutcome check(CheckRequest check) {
