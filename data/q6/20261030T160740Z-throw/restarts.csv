@@ -1,0 +1,7 @@
+when,container,restart_count,last_exit_code
+before,agenor-sentinel_probe_1,0,0
+before,agenor-sentinel_probe_2,0,0
+before,agenor-sentinel_probe_3,0,0
+after,agenor-sentinel_probe_1,0,0
+after,agenor-sentinel_probe_2,0,0
+after,agenor-sentinel_probe_3,0,0

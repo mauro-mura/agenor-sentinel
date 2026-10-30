@@ -1,0 +1,3 @@
+at,agent_rows,agent_rows_running,agent_rows_stale,node_streams,topic_streams,dlq_streams,other_keys,consumer_groups,pending_entries,stream_entries,used_memory
+2026-10-30T16:01:30Z,5,5,0,5,1,0,0,6,0,75,1435296
+2026-10-30T16:07:26Z,5,5,0,6,1,0,0,7,1,388,1684528

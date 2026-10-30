@@ -1,0 +1,3 @@
+requests for target poison-exit (id 6):
+request_id,created_at,target_id,probe_id,probe_node_id,probe_node_status,probe_node_last_seen,state,request_location,request_key,request_entry_id,deliveries,consumer,reply_performative,error_class,error_message,outcome
+b31a8049-fdcc-4e13-8dea-4de426c79b27,2026-10-30T16:01:45.808373Z,6,31f8133c-2a70-40c3-9d95-54d7d753d4d2,ce0af709-7a8c-4ccb-b491-e29b8f7d88f7,,,TIMED_OUT,PENDING,sentinel:node:ce0af709-7a8c-4ccb-b491-e29b8f7d88f7,1793376105813-0,1,sentinel:cg:node/sentinel:consumer:ce0af709-7a8c-4ccb-b491-e29b8f7d88f7,,java.util.concurrent.TimeoutException,null,NOT_APPLICABLE

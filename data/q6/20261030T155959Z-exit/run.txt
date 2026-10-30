@@ -1,0 +1,8 @@
+mode=exit observe=300 probes=3 warmup=60 grace=30
+agenor=0.39.0
+commit=4852b9f
+started=2026-10-30T15:59:59Z
+poison target added at 2026-10-30T16:01:45.231Z
+dispatching stopped at 2026-10-30T16:06:48.986Z
+dead-letter streams: 0
+finished=2026-10-30T16:07:40Z

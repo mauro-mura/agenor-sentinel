@@ -635,3 +635,81 @@ Both regime 4 runs ended the same way for the application: no request answered a
 health UP. In the first the broker could not be reached; in the second it was reached and could
 not be read. A node of this stack has no way, today, to tell an orchestrator that its transport is
 not working, whatever the reason.
+
+## Q6. A poison message: one death, then it lies pending where nobody reads; the DLQ only sees exceptions
+
+- **Kind:** outcome of a question (CRITERION §4, Q6). No new finding.
+- **Version and configuration:** as in Q4: 0.39.0, the starter in all three roles, JDBC directory
+  and presence, Valkey at a fixed address (F4). Same orchestrator.
+- **Runs:** `scripts/measure-q6`, on commit `4852b9f`, 2026-10-30, three probes, one poison request
+  each (a target with an interval of a day), 300 s of observation:
+  - `exit`, from 15:59:59 to 16:07:40 UTC: the probe that handles the request calls `System.exit`,
+    and so would every later delivery of it. Data: `data/q6/20261030T155959Z-exit/`.
+  - `throw`, from 16:07:40 to 16:15:12 UTC: the handler throws instead, the case `adapters/redis`
+    documents. Data: `data/q6/20261030T160740Z-throw/`.
+
+### What happened to the poison message
+
+| | `System.exit` | Exception in the handler |
+|---|---|---|
+| Deliveries | 1 | 3 |
+| Probe deaths (container restarts, `restarts.csv`) | 1 | 0 |
+| Where it ended | pending in the dead node's stream, delivered once | the node's `:dlq` stream, `dlq_attempts` 3 |
+| State in the ledger | timed out | dead-lettered |
+| Other requests | 129 answered, none lost | 131 answered, none lost |
+
+**With `System.exit`** (`logs.txt.gz`, probe_1): `System.exit` runs the JVM's shutdown hooks, so
+the probe stops in an orderly way while the handler is stuck inside `System.exit`. The agent goes
+to `STOPPING` at 16:01:45.827, 19 ms after the request was sent; the mailbox gives up on the
+handler five seconds later ("Mailbox for agent '...' stopped with handlers still running after
+PT5S", WARN); the agent's directory row is removed, as on any orderly stop (Q4); the process
+exits, and its container is running again at 16:01:55. The replacement has a new node id, so the
+message is never delivered again: it stays pending in the old node's stream, under a consumer that
+no longer exists, delivered once (`poison.txt`). The coordinator sees its request time out.
+
+**With an exception** (`logs.txt.gz`, probe_2): the handler fails at 16:09:18.290, again at
+16:10:06.457 and at 16:10:38.395, each time logged at ERROR, each time "attempt n/3" at WARN. At
+16:11:10.332 the consumer loop logs "exceeded 3 delivery attempts; moving to DLQ" (ERROR), and the
+message is in `sentinel:node:<node id>:dlq`, with the reason, the payload and `dlq_attempts` 3
+(`dlq.txt`): 112 s after the send. This is what `adapters/redis` describes.
+
+### What decides it
+
+- **Where does it end?** Neither in the DLQ nor in an endless cycle of deaths: pending in the dead
+  node's stream, where nobody will read it.
+- **After how many deaths?** One. The cycle stops because the restarted probe has a new node id
+  and never sees its predecessor's stream. That is an accident of the starter's identity, not a
+  mechanism: `adapters/redis` says that "a restarted JVM picks up its own pending entries
+  automatically" and that attempts are counted in memory, so "a restart resets the count". With a
+  node id that survives restarts, those two sentences together describe a message redelivered to
+  every new process and never dead-lettered. That configuration was not run here; it is what the
+  pages imply, not a measure.
+- **With what signal for an operator?** One container restart, and one WARN line about a mailbox
+  stopped with handlers running. No ERROR; the health of every process read UP in all 75 samples
+  of the run (`health.csv`); the DLQ is empty, so `deadLetterQueue().recent(n)` and the console
+  show nothing. The application sees one request time out. With an exception, by contrast, the
+  operator gets seven ERROR lines (two per attempt, one for the move to the DLQ,
+  `log-counts.txt`) and a DLQ entry that names the cause.
+
+No new defect. The request had a reply to wait for, so the application saw it fail, as in Q2; a
+send that expects no reply would have left nothing anywhere but a pending entry, which is Q2's
+open case again.
+
+### Against CRITERION §7
+
+- **"The poison message does not reach the DLQ": confirmed.**
+- **"It stays pending in the dead probe's stream, and nobody reclaims it": confirmed.**
+- **"The cycle stops by accident, not by design": confirmed.** After one death, because of the new
+  node id.
+- **"And nobody sees it": confirmed for Agenor and for an operator, not for the application.**
+  Nothing in Agenor's DLQ, its console or its health shows it, and the only log line is a WARN
+  that does not name the message. The application, which waits for a reply, sees a timeout.
+
+### Side observations
+
+- **The DLQ is per node.** The dead-lettered message is in `sentinel:node:<node id>:dlq`, a
+  stream named after the node that failed it. Under the starter that name is new on every start,
+  so each process that ever dead-letters anything leaves a DLQ stream of its own. Whether that
+  grows is Q5's.
+- **O1 again, at start-up.** The `throw` run has 5 outcomes published and never applied, all
+  between 16:08:04.351 and 16:08:04.399 UTC; the alerter subscribed at 16:08:04.746.
