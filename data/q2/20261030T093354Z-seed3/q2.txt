@@ -1,0 +1,43 @@
+Ledger: 230 request(s): ANSWERED 132, TIMED_OUT 98
+Faults: 5 probe(s) killed without goodbye
+
+#1 2026-10-30T09:35:28.327Z agenor-sentinel_probe_1 node 964645ea-1adc-43c3-b8e2-2668acb5789f
+  answered before its death: 7
+  still chosen for 602.0 s after its death
+  in flight at death: 1
+    TIMED_OUT      PENDING                 1
+  sent after death: 35
+    TIMED_OUT      UNREAD                 35
+
+#2 2026-10-30T09:37:28.324Z agenor-sentinel_probe_3 node 23c3d4ba-adb5-41c4-bc12-8ee6aef492c5
+  answered before its death: 18
+  still chosen for 472.0 s after its death
+  in flight at death: 0
+  sent after death: 26
+    TIMED_OUT      UNREAD                 26
+
+#3 2026-10-30T09:39:28.930Z agenor-sentinel_probe_3 node 798232bc-805a-4d0d-81c0-6a177af98097
+  answered before its death: 7
+  still chosen for 367.4 s after its death
+  in flight at death: 1
+    TIMED_OUT      PENDING                 1
+  sent after death: 19
+    TIMED_OUT      UNREAD                 19
+
+#4 2026-10-30T09:41:28.694Z agenor-sentinel_probe_1 node 741182f2-4a9f-4332-be85-1803bca35e83
+  answered before its death: 24
+  still chosen for 241.6 s after its death
+  in flight at death: 0
+  sent after death: 11
+    TIMED_OUT      UNREAD                 11
+
+#5 2026-10-30T09:43:28.821Z agenor-sentinel_probe_2 node 9ac06047-09c4-4100-92af-a5436712d6ee
+  answered before its death: 41
+  still chosen for 111.5 s after its death
+  in flight at death: 0
+  sent after death: 5
+    TIMED_OUT      UNREAD                  5
+
+All faults
+  in flight at death   TIMED_OUT      PENDING                 2
+  sent after death     TIMED_OUT      UNREAD                 96

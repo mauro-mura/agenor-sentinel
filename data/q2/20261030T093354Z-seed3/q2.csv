@@ -1,0 +1,8 @@
+n,victim_node_id,group,state,request_location,requests,chosen_for_seconds
+1,964645ea-1adc-43c3-b8e2-2668acb5789f,in flight at death,TIMED_OUT,PENDING,1,602.0
+1,964645ea-1adc-43c3-b8e2-2668acb5789f,sent after death,TIMED_OUT,UNREAD,35,602.0
+2,23c3d4ba-adb5-41c4-bc12-8ee6aef492c5,sent after death,TIMED_OUT,UNREAD,26,472.0
+3,798232bc-805a-4d0d-81c0-6a177af98097,in flight at death,TIMED_OUT,PENDING,1,367.4
+3,798232bc-805a-4d0d-81c0-6a177af98097,sent after death,TIMED_OUT,UNREAD,19,367.4
+4,741182f2-4a9f-4332-be85-1803bca35e83,sent after death,TIMED_OUT,UNREAD,11,241.6
+5,9ac06047-09c4-4100-92af-a5436712d6ee,sent after death,TIMED_OUT,UNREAD,5,111.5
