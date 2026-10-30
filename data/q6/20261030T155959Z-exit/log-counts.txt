@@ -1,0 +1,3 @@
+ ERROR : 0
+ WARN : 5
+NOGROUP: 0

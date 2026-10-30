@@ -1,0 +1,100 @@
+#!/bin/sh
+# Q6 end to end: one poison message, and where it ends up (CRITERION §4).
+#
+#   mvn -DskipTests package && scripts/measure-q6 exit|throw [OBSERVE] [PROBES]
+#
+# On a clean stack, after the warm-up, a target 'poison-exit' or 'poison-throw' is added with an
+# interval of a day, so the coordinator sends exactly one request for it. The probe that handles
+# that request calls System.exit (exit) or throws from its handler (throw), and so does every
+# later delivery of the same request (ProbeAgent.poison). OBSERVE seconds later (300 by default)
+# the dispatching stops and the results are taken:
+#   - restarts.csv: each probe container's restart count and last exit code, before and after;
+#     a death of a probe is a restart of its container;
+#   - poison.txt: the poison request's row of the ledger: its state, where it is in Redis, how many
+#     times it was delivered, by which consumer;
+#   - dlq.txt: every entry of every ':dlq' stream;
+#   - the ledger, the timeline, the census before and after, health sampled every 15 s, and the
+#     logs of the three roles, as scripts/measure keeps them.
+#
+# Destroys and recreates the compose stack of this repository, volumes included.
+set -eu
+cd "$(dirname "$0")/.."
+
+MODE=$1
+case "$MODE" in
+    exit|throw) ;;
+    *) echo "mode must be exit or throw" >&2; exit 2 ;;
+esac
+OBSERVE=${2:-300}
+PROBES=${3:-3}
+WARMUP=60
+GRACE=30
+OUT=data/q6/$(date -u +%Y%m%dT%H%M%SZ)-$MODE
+mkdir -p "$OUT"
+
+psql() {
+    docker compose exec -T postgres psql -U sentinel -d sentinel -At -v ON_ERROR_STOP=1 -c "$1"
+}
+
+restarts() {
+    for id in $(docker compose ps -q probe); do
+        docker inspect -f "$1,{{.Name}},{{.RestartCount}},{{.State.ExitCode}}" "$id" | sed 's:,/:,:'
+    done
+}
+
+{
+    echo "mode=$MODE observe=$OBSERVE probes=$PROBES warmup=$WARMUP grace=$GRACE"
+    echo "agenor=$(sed -n 's:.*<agenor.version>\(.*\)</agenor.version>.*:\1:p' pom.xml)"
+    echo "commit=$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . || echo '+dirty')"
+    echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$OUT/run.txt"
+
+docker compose down -v
+docker compose build --quiet
+docker compose up -d --scale probe="$PROBES"
+until [ -n "$(psql "SELECT name FROM target" 2>/dev/null)" ]; do sleep 1; done
+sleep "$WARMUP"
+
+( while :; do scripts/health --csv "$OUT/health.csv" > /dev/null 2>&1; sleep 15; done ) &
+SAMPLER=$!
+trap 'kill "$SAMPLER" 2>/dev/null || true' EXIT
+scripts/census --csv "$OUT/census.csv"
+echo "when,container,restart_count,last_exit_code" > "$OUT/restarts.csv"
+restarts before >> "$OUT/restarts.csv"
+
+psql "INSERT INTO target (name, url, interval_seconds, threshold)
+      VALUES ('poison-$MODE', 'http://fixtures:8080/t/poison-$MODE', 86400, 1)" > /dev/null
+echo "poison target added at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" | tee -a "$OUT/run.txt"
+sleep "$OBSERVE"
+restarts after >> "$OUT/restarts.csv"
+
+kill "$SAMPLER"
+scripts/quiesce | tee -a "$OUT/run.txt"
+sleep $((GRACE + 5))
+scripts/reconcile --grace "$GRACE" --csv "$OUT/ledger.csv" | tee "$OUT/reconcile.txt"
+scripts/timeline "$OUT/ledger.csv" --out "$OUT/timeline.csv" | tee "$OUT/timeline.txt"
+scripts/census --csv "$OUT/census.csv"
+cat "$OUT/restarts.csv"
+
+POISON_ID=$(psql "SELECT id FROM target WHERE name = 'poison-$MODE'")
+{
+    echo "requests for target poison-$MODE (id $POISON_ID):"
+    head -1 "$OUT/ledger.csv"
+    grep -E "^[^,]*,[^,]*,$POISON_ID," "$OUT/ledger.csv" || echo "none"
+} | tee "$OUT/poison.txt"
+
+{
+    for key in $(docker compose exec -T valkey valkey-cli --scan --pattern 'sentinel:*:dlq'); do
+        echo "== $key"
+        docker compose exec -T valkey valkey-cli --json XRANGE "$key" - +
+    done
+} > "$OUT/dlq.txt"
+echo "dead-letter streams: $(grep -c '^== ' "$OUT/dlq.txt" || true)" | tee -a "$OUT/run.txt"
+
+docker compose logs --no-color coordinator alerter probe > "$OUT/logs.txt" 2>&1
+for pattern in ' ERROR ' ' WARN ' NOGROUP; do
+    echo "$pattern: $(grep -c -- "$pattern" "$OUT/logs.txt" || true)"
+done | tee "$OUT/log-counts.txt"
+gzip -9 "$OUT/logs.txt"
+echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/run.txt"
+echo "Results in $OUT"

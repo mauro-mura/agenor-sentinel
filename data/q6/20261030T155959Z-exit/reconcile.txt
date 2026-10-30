@@ -1,0 +1,16 @@
+Reconciliation at 2026-10-30T16:07:24.178035065Z: 130 request(s) in the ledger, 7 stream(s) under 'sentinel:'
+
+State of each request (CRITERION §4)
+  ANSWERED              129
+  DEAD_LETTERED           0
+  TIMED_OUT               1
+  IN_FLIGHT               0
+  LOST                    0
+
+Where the unanswered requests are in Redis (Q2)
+  TIMED_OUT      PENDING            probe's directory row: no directory row        1
+
+Outcomes of INFORM replies (O1)
+  APPLIED                     129
+
+One row per request: data/q6/20261030T155959Z-exit/ledger.csv
