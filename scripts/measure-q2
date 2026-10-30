@@ -1,54 +1,5 @@
 #!/bin/sh
-# Q2 end to end: a clean stack, probes killed without goodbye (regime 3) at a fixed seed, the
-# dispatching stopped, a final ledger, and Q2's measures. Everything lands in one directory.
+# Q2's measurement, regime 3; kept so that the commands in FINDINGS.md still run.
 #
 #   mvn -DskipTests package && scripts/measure-q2 [SEED] [COUNT] [INTERVAL] [PROBES] [DELAY_MS]
-#
-# Every target answers after DELAY_MS (3000 by default, below the probe's 5 s check timeout), so
-# that a probe killed at a random moment often has a check in progress: the "in flight at death"
-# half of Q2. With instant targets that half would be empty by chance, not by design.
-#
-# Destroys and recreates the compose stack of this repository, volumes included.
-set -eu
-cd "$(dirname "$0")/.."
-
-SEED=${1:-3}
-COUNT=${2:-5}
-INTERVAL=${3:-120}
-PROBES=${4:-3}
-DELAY_MS=${5:-3000}
-WARMUP=60
-GRACE=30
-OUT=data/q2/$(date -u +%Y%m%dT%H%M%SZ)-seed$SEED
-mkdir -p "$OUT"
-
-{
-    echo "seed=$SEED count=$COUNT interval=$INTERVAL probes=$PROBES delay_ms=$DELAY_MS warmup=$WARMUP grace=$GRACE"
-    echo "agenor=$(sed -n 's:.*<agenor.version>\(.*\)</agenor.version>.*:\1:p' pom.xml)"
-    echo "commit=$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . || echo '+dirty')"
-    echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-} > "$OUT/run.txt"
-
-docker compose down -v
-docker compose build --quiet
-docker compose up -d --scale probe="$PROBES"
-# The coordinator creates the target table; the fixtures must be up to be slowed.
-targets() {
-    docker compose exec -T postgres psql -U sentinel -d sentinel -At -c "SELECT name FROM target ORDER BY id" 2>/dev/null
-}
-until [ -n "$(targets)" ] && curl -fsS -o /dev/null http://127.0.0.1:58080/control; do sleep 1; done
-for t in $(targets); do
-    curl -fsS -X POST "http://127.0.0.1:58080/control/$t/slow/$DELAY_MS" >> "$OUT/run.txt"
-done
-sleep "$WARMUP"
-
-scripts/faults --regime 3 --seed "$SEED" --count "$COUNT" --interval "$INTERVAL" --out "$OUT/faults.csv"
-# The last killed probe gets a full interval, like the others, before the dispatching stops.
-sleep "$INTERVAL"
-
-scripts/quiesce | tee -a "$OUT/run.txt"
-sleep $((GRACE + 5))
-scripts/reconcile --grace "$GRACE" --csv "$OUT/ledger.csv" | tee "$OUT/reconcile.txt"
-scripts/q2-deaths "$OUT/faults.csv" "$OUT/ledger.csv" --out "$OUT/q2.csv" | tee "$OUT/q2.txt"
-echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/run.txt"
-echo "Results in $OUT"
+exec "$(dirname "$0")/measure" 3 "$@"

@@ -13,6 +13,11 @@ last_seen in the ledger, read after the run, when it no longer moves): the time 
 heartbeat to the death, and to the last request sent to the dead node, which a coordinator that
 filters on presence keeps within the staleness window.
 
+Regimes 1 and 2 are split the same way, around the moment the probe was sent SIGTERM ("stop"
+instead of "death"); Q4 reads them. Their probes remove their own directory row on the way out,
+so their last heartbeat is not known. Rows of the faults CSV with no victim (a probe added by
+scaling up) are skipped.
+
 Standard library only.
 """
 
@@ -36,7 +41,7 @@ def main():
     args = parser.parse_args()
 
     with open(args.faults, newline="") as f:
-        faults = [r for r in csv.DictReader(f) if r["regime"] == "3"]
+        faults = [r for r in csv.DictReader(f) if r["victim_node_id"]]
     with open(args.ledger, newline="") as f:
         ledger = list(csv.DictReader(f))
     by_node = collections.defaultdict(list)
@@ -45,12 +50,14 @@ def main():
 
     states = collections.Counter(r["state"] for r in ledger)
     print(f"Ledger: {len(ledger)} request(s): " + ", ".join(f"{s} {n}" for s, n in sorted(states.items())))
-    print(f"Faults: {len(faults)} probe(s) killed without goodbye")
+    actions = collections.Counter(r["action"] for r in faults)
+    print(f"Faults: {len(faults)} probe(s) gone: " + ", ".join(f"{a} {n}" for a, n in sorted(actions.items())))
 
     out_rows = []
     totals = collections.Counter()
     for fault in faults:
         killed = instant(fault["killed_at"])
+        end = "death" if fault["regime"] == "3" else "stop"
         requests = by_node.get(fault["victim_node_id"], [])
         before = [r for r in requests if instant(r["created_at"]) < killed and r["state"] != "ANSWERED"]
         after = [r for r in requests if instant(r["created_at"]) >= killed]
@@ -63,13 +70,14 @@ def main():
         chosen_since_seen = f"{(last - last_seen).total_seconds():.1f}" if last_seen and last else ""
 
         print()
-        print(f"#{fault['n']} {fault['killed_at']} {fault['container']} node {fault['victim_node_id']}")
-        print(f"  answered before its death: {answered_before}")
-        print(f"  still chosen for {chosen_for:.1f} s after its death")
+        print(f"#{fault['n']} {fault['killed_at']} {fault['action']} {fault['container']} "
+              f"node {fault['victim_node_id']}" + (f" exit {fault['exit_code']}" if fault.get("exit_code") else ""))
+        print(f"  answered before its {end}: {answered_before}")
+        print(f"  still chosen for {chosen_for:.1f} s after its {end}")
         if last_seen:
-            print(f"  last heartbeat {silent_before} s before its death; "
+            print(f"  last heartbeat {silent_before} s before its {end}; "
                   f"last request sent {chosen_since_seen or '-'} s after it")
-        for group, rows in (("in flight at death", before), ("sent after death", after)):
+        for group, rows in ((f"in flight at {end}", before), (f"sent after {end}", after)):
             counts = collections.Counter((r["state"], r["request_location"]) for r in rows)
             print(f"  {group}: {len(rows)}")
             for (state, location), n in sorted(counts.items()):
