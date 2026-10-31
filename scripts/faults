@@ -6,8 +6,9 @@ each one as a CSV row: when, to which container, and which agent and node died a
     scripts/faults --regime 3 --victims probe,coordinator,alerter --seed 3 --count 6 --interval 120 --out faults.csv
 
 Regime 1 (scale up and down): odd faults scale the probes up to --high, even faults back down to
---low, with docker compose --scale. Scaling down stops the highest-numbered containers with
-SIGTERM, as compose does, then lets compose remove them; one row per probe added or removed. The
+--low; --direction makes every fault go one way, for a caller that interleaves regimes
+(scripts/long-run). Scaling up is docker compose scale. Scaling down stops the highest-numbered
+containers with SIGTERM, as compose does, and removes them; one row per probe added or removed. The
 seed plays no part: compose decides which containers go.
 
 Regime 2 (rolling upgrade): each fault replaces every probe, one at a time. A probe's container is
@@ -44,6 +45,8 @@ import argparse
 import concurrent.futures
 import csv
 import datetime
+import gzip
+import os
 import random
 import re
 import subprocess
@@ -67,8 +70,9 @@ def now():
 def containers(service):
     ids = run("docker", "compose", "ps", "-q", service).split()
     names = [run("docker", "inspect", "-f", "{{.Name}}", i).strip().lstrip("/") for i in ids]
-    # By compose's number, so that probe_10 sorts after probe_9.
-    return sorted(names, key=lambda name: int(name.rsplit("_", 1)[1]))
+    # By compose's number, so that probe_10 sorts after probe_9. Compose 1 names a container
+    # <project>_probe_1, Compose 2 <project>-probe-1.
+    return sorted(names, key=lambda name: int(re.search(r"(\d+)$", name).group(1)))
 
 
 def probe_containers():
@@ -137,10 +141,18 @@ def rolling_upgrade(rng, seed, n, args):
     return [replace_probe(container, seed, n, args) for container in probes]
 
 
+def compose_scale(probes):
+    """Sets the number of probe containers. Not `up --scale`: since Valkey has a fixed address
+    (compose.yml, F4) the network has an IPAM configuration, and docker-compose 1.29 on podman then
+    refuses every `up` on a running stack ("needs to be recreated - IPAM option driver has
+    changed"). `scale` does not look at the network."""
+    run("docker", "compose", "scale", f"probe={probes}")
+
+
 def scale(rng, seed, n, args):
     before = probe_containers()
-    if n % 2 == 1:
-        run("docker", "compose", "up", "-d", "--no-deps", "--no-recreate", "--scale", f"probe={args.high}", "probe")
+    if (args.direction == "up") if args.direction else n % 2 == 1:
+        compose_scale(args.high)
         added_at = now()
         rows = []
         for container in (c for c in probe_containers() if c not in before):
@@ -150,14 +162,23 @@ def scale(rng, seed, n, args):
                              replacement_node_id=node_of(agent) if agent else None,
                              replacement_running_at=running_at))
         return rows
-    # Compose removes the highest-numbered containers; they are stopped first, in parallel, so
-    # that each stop is recorded before compose removes the container and its log.
+    # The highest-numbered containers go, as compose would choose them. They are stopped first, in
+    # parallel, so that each stop is recorded, then removed here: `scale` counts only running
+    # containers, so after the stops it has nothing left to do, and a stopped container left in
+    # place would be started again by the next rolling upgrade. Removing a container removes its
+    # log, so with --logs the log is kept first.
     leaving = before[args.low:]
     victims = {c: running_agent(c) for c in leaving}
     nodes = {c: node_of(a) if a else None for c, a in victims.items()}
     with concurrent.futures.ThreadPoolExecutor(len(leaving) or 1) as pool:
         stops = dict(zip(leaving, pool.map(lambda c: stop(c, args.stop_timeout), leaving)))
-    run("docker", "compose", "up", "-d", "--no-deps", "--no-recreate", "--scale", f"probe={args.low}", "probe")
+    if args.logs:
+        os.makedirs(args.logs, exist_ok=True)
+        for c in leaving:
+            logs = subprocess.run(["docker", "logs", "--timestamps", c], capture_output=True, text=True)
+            with gzip.open(os.path.join(args.logs, f"{n:03d}-{c}.txt.gz"), "wt") as f:
+                f.write(logs.stdout + logs.stderr)
+    run("docker", "rm", *leaving)
     return [dict(seed=seed, n=n, regime=1, action=f"scale down to {args.low}", container=c,
                  victim_agent_id=victims[c], victim_node_id=nodes[c], killed_at=stops[c][0],
                  exit_code=stops[c][1], stop_seconds=stops[c][2]) for c in leaving]
@@ -217,7 +238,13 @@ def main():
     parser.add_argument("--high", type=int, default=5, help="regime 1: probes after scaling up")
     parser.add_argument("--victims", default="probe",
                         help="regime 3: comma-separated roles that may die, among probe, coordinator, alerter")
+    parser.add_argument("--direction", choices=["up", "down"],
+                        help="regime 1: scale this way every time, instead of up on odd faults and down on even ones")
+    parser.add_argument("--first", type=int, default=1, help="the number of the first fault, in the n column")
     parser.add_argument("--out", required=True, help="CSV file, one row per fault")
+    parser.add_argument("--logs", help="regime 1: directory where the log of each removed container is kept")
+    parser.add_argument("--append", action="store_true",
+                        help="append to --out, with a header only if it is new or empty")
     args = parser.parse_args()
     args.victims = args.victims.split(",")
     unknown = set(args.victims) - {"probe", "coordinator", "alerter"}
@@ -225,10 +252,12 @@ def main():
         parser.error(f"unknown victims: {', '.join(sorted(unknown))}")
 
     rng = random.Random(args.seed)
-    with open(args.out, "w", newline="") as f:
+    with open(args.out, "a" if args.append else "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=COLUMNS)
-        writer.writeheader()
-        for n in range(1, args.count + 1):
+        if f.tell() == 0:
+            writer.writeheader()
+        last = args.first + args.count - 1
+        for n in range(args.first, last + 1):
             started = time.monotonic()
             fault = {1: scale, 2: rolling_upgrade, 3: kill_jvm, 4: restart_broker}[args.regime]
             for row in fault(rng, args.seed, n, args):
@@ -237,7 +266,7 @@ def main():
                 print(f"#{n} {row['killed_at']} {row['action']} {row['container']}: "
                       f"node {row.get('victim_node_id')} gone (exit {row.get('exit_code') or '-'}), "
                       f"node {row.get('replacement_node_id')} running at {row.get('replacement_running_at')}")
-            if n < args.count:
+            if n < last:
                 time.sleep(max(0.0, args.interval - (time.monotonic() - started)))
 
 
