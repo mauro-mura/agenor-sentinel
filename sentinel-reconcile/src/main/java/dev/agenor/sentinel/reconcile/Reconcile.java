@@ -45,8 +45,10 @@ public final class Reconcile {
 
     private static final List<String> COLUMNS = List.of(
             "request_id", "created_at", "target_id", "probe_id", "probe_node_id", "probe_node_status",
-            "probe_node_last_seen",
-            "state", "request_location", "request_key", "request_entry_id", "deliveries", "consumer",
+            "probe_node_last_seen", "sender_id", "sender_node_id", "sender_current_node_id",
+            "sender_node_last_sent",
+            "state", "cause", "request_location", "request_key", "request_entry_id", "deliveries", "consumer",
+            "reply_key", "reply_delivery",
             "reply_performative", "error_class", "error_message", "outcome");
 
     private Reconcile() {
@@ -137,6 +139,24 @@ public final class Reconcile {
         where.forEach((line, n) -> out.printf("  %s %8d%n", line, n));
 
         out.println();
+        out.println("Which end stopped while an unanswered request was open, and where the probe's reply is");
+        Map<String, Long> causes = new TreeMap<>();
+        for (int i = 0; i < verdicts.size(); i++) {
+            Verdict v = verdicts.get(i);
+            if (v.state() != State.ANSWERED) {
+                String reply = v.reply() == null ? "no reply in Redis"
+                        : "reply " + v.reply().delivery() + " in "
+                        + (v.reply().key().equals(redis.nodeStreamKey(ledger.get(i).senderNodeId()))
+                                ? "the sender's stream" : v.reply().key());
+                causes.merge(String.format("%-14s %-15s %s", v.state(), v.cause(), reply), 1L, Long::sum);
+            }
+        }
+        if (causes.isEmpty()) {
+            out.println("  none");
+        }
+        causes.forEach((line, n) -> out.printf("  %s %8d%n", line, n));
+
+        out.println();
         out.println("Outcomes of INFORM replies (O1)");
         Map<Outcome, Long> outcomes = new EnumMap<>(Outcome.class);
         verdicts.stream().map(Verdict::outcome).filter(o -> o != Outcome.NOT_APPLICABLE)
@@ -154,12 +174,15 @@ public final class Reconcile {
             LedgerEntry e = ledger.get(i);
             Verdict v = verdicts.get(i);
             var request = v.request();
+            var reply = v.reply();
             List<Object> row = List.of(
                     e.requestId(), e.createdAt(), e.targetId(), e.probeId(), nz(e.probeNodeId()),
-                    nz(e.probeNodeStatus()), nz(e.probeNodeLastSeen()), v.state(), v.location(),
+                    nz(e.probeNodeStatus()), nz(e.probeNodeLastSeen()), nz(e.senderId()),
+                    nz(e.senderNodeId()), nz(e.senderCurrentNodeId()), nz(e.senderNodeLastSent()), v.state(), v.cause(), v.location(),
                     request == null ? "" : request.key(), request == null ? "" : request.entryId(),
                     request == null ? "" : request.deliveries(),
                     request == null ? "" : nz(request.consumer()),
+                    reply == null ? "" : reply.key(), reply == null ? "" : reply.delivery(),
                     nz(e.replyPerformative()), nz(e.errorClass()), nz(e.errorMessage()), v.outcome());
             out.write(String.join(",", row.stream().map(String::valueOf).map(Reconcile::csvField).toList()));
             out.write('\n');

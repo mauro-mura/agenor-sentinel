@@ -1,0 +1,315 @@
+#!/usr/bin/env -S python3 -I
+"""The long run of CRITERION §2: a failure from regimes 1-3 every 15 minutes, for 24 hours, chosen
+with a fixed, recorded seed; and every hour, the census that Q5 reads.
+
+    mvn -DskipTests package && scripts/long-run [--seed 3] [--hours 24] [--interval 900]
+
+Detached from the terminal, for a day:
+
+    setsid nohup scripts/long-run > /dev/null 2>&1 &
+
+The schedule is drawn before the first fault and written to schedule.csv. It is balanced: each
+regime comes up the same number of times (one more for some when the count is not a multiple of
+three), in an order shuffled by the seed, so that no question is left with few samples by chance.
+Within regime 3 the victims are balanced the same way among a probe, the coordinator and the
+alerter. Regime 1 scales up and down in turn, starting with up, whatever comes in between. Each
+fault is one call of scripts/faults, with a seed of its own (seed * 1000 + n), so that it does not
+repeat the choices of the fault before.
+
+Fault n starts at (n - 1) * interval after the warmup, and the run ends one interval after the last
+one, so --hours 24 at 900 s makes 96 faults and 24 hours. A dress rehearsal is the same run,
+shorter: --hours 2 makes 8.
+
+Along the way:
+  - scripts/census every --census-every seconds (3600), into census.csv;
+  - scripts/health every 15 s, into health.csv, from a thread that is restarted if it dies;
+  - the logs of the coordinator, the alerter and every probe, saved before each fault and at the
+    end, in compressed slices (logs/), and the whole log of each probe a scale down removes
+    (logs/removed), which would go with the container.
+A step that fails is written to errors.log and the run goes on: one bad fault must not cost the
+other ninety-five. At the end the dispatching is stopped (scripts/quiesce), and after the grace
+period come the ledger (scripts/reconcile), the timeline and a last census.
+
+Destroys and recreates the compose stack of this repository, volumes included. Standard library
+only; needs the docker CLI.
+"""
+
+import argparse
+import csv
+import datetime
+import gzip
+import os
+import random
+import re
+import subprocess
+import sys
+import threading
+import time
+import traceback
+import urllib.request
+
+ROLES = ["coordinator", "alerter", "probe"]
+
+
+def utc_now():
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def iso(moment):
+    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+class Run:
+    def __init__(self, out):
+        self.out = out
+        self.progress = open(os.path.join(out, "progress.log"), "a", buffering=1)
+
+    def say(self, text):
+        line = f"{iso(utc_now())} {text}"
+        print(line, flush=True)
+        self.progress.write(line + "\n")
+
+    def error(self, step, detail):
+        with open(os.path.join(self.out, "errors.log"), "a") as f:
+            f.write(f"{iso(utc_now())} {step}\n{detail.rstrip()}\n\n")
+        self.say(f"ERROR in {step} (errors.log)")
+
+    def step(self, name, *command, output=None):
+        """Runs a command; a failure is recorded, not raised. Returns the exit code."""
+        try:
+            done = subprocess.run(command, capture_output=True, text=True)
+        except OSError as e:
+            self.error(name, str(e))
+            return -1
+        if output:
+            with open(os.path.join(self.out, output), "w") as f:
+                f.write(done.stdout)
+        if done.returncode != 0:
+            self.error(name, f"exit {done.returncode}\n{done.stdout[-4000:]}\n{done.stderr[-4000:]}")
+        return done.returncode
+
+
+def balanced(rng, items, count):
+    """count items, each of them count // len(items) times and the rest drawn once each, shuffled."""
+    drawn = items * (count // len(items)) + rng.sample(items, count % len(items))
+    rng.shuffle(drawn)
+    return drawn
+
+
+def schedule(seed, count, interval):
+    rng = random.Random(seed)
+    regimes = balanced(rng, [1, 2, 3], count)
+    victims = iter(balanced(rng, ["probe", "coordinator", "alerter"], regimes.count(3)))
+    plan, ups = [], 0
+    for n, regime in enumerate(regimes, start=1):
+        row = dict(n=n, offset_seconds=int((n - 1) * interval), regime=regime, victim="", direction="",
+                   fault_seed=seed * 1000 + n)
+        if regime == 1:
+            row["direction"] = "up" if ups % 2 == 0 else "down"
+            ups += 1
+        elif regime == 3:
+            row["victim"] = next(victims)
+        plan.append(row)
+    return plan
+
+
+def start_stack(run, args):
+    for command in (["docker", "compose", "down", "-v"], ["docker", "compose", "build", "--quiet"],
+                    ["docker", "compose", "up", "-d", "--scale", f"probe={args.probes}"]):
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    # The coordinator creates the target table; the fixtures must be up to be slowed.
+    while True:
+        names = subprocess.run(["docker", "compose", "exec", "-T", "postgres", "psql", "-U", "sentinel",
+                                "-d", "sentinel", "-At", "-c", "SELECT name FROM target ORDER BY id"],
+                               capture_output=True, text=True).stdout.split()
+        try:
+            urllib.request.urlopen("http://127.0.0.1:58080/control", timeout=2).close()
+        except OSError:
+            names = []
+        if names:
+            break
+        time.sleep(1)
+    for name in names:
+        request = urllib.request.Request(f"http://127.0.0.1:58080/control/{name}/slow/{args.delay_ms}",
+                                         method="POST")
+        urllib.request.urlopen(request, timeout=5).close()
+    run.say(f"stack up: {args.probes} probes, {len(names)} targets slowed to {args.delay_ms} ms")
+
+
+class Health(threading.Thread):
+    """scripts/health every 15 s. Its own failures are recorded; it stops only when asked."""
+
+    def __init__(self, run, every):
+        super().__init__(daemon=True)
+        self.run_ = run
+        self.every = every
+        self.stopping = threading.Event()
+
+    def run(self):
+        while not self.stopping.is_set():
+            self.run_.step("health", "scripts/health", "--csv", os.path.join(self.run_.out, "health.csv"))
+            self.stopping.wait(self.every)
+
+
+class Logs:
+    """Saves what each container of the three roles logged since the previous call."""
+
+    def __init__(self, run):
+        self.run = run
+        self.since = None
+        self.dir = os.path.join(run.out, "logs")
+        os.makedirs(self.dir, exist_ok=True)
+
+    def save(self, label):
+        until = utc_now()
+        try:
+            ids = subprocess.run(["docker", "compose", "ps", "-q", *ROLES], check=True, capture_output=True,
+                                 text=True).stdout.split()
+            with gzip.open(os.path.join(self.dir, f"{label}.txt.gz"), "wt") as f:
+                for container in ids:
+                    name = subprocess.run(["docker", "inspect", "-f", "{{.Name}}", container], check=True,
+                                          capture_output=True, text=True).stdout.strip().lstrip("/")
+                    command = ["docker", "logs", "--timestamps"]
+                    if self.since:
+                        command += ["--since", iso(self.since)]
+                    logs = subprocess.run(command + [container], capture_output=True, text=True)
+                    for line in (logs.stdout + logs.stderr).splitlines():
+                        f.write(f"{name} | {line}\n")
+            self.since = until
+        except (OSError, subprocess.CalledProcessError) as e:
+            self.run.error(f"logs {label}", str(e))
+
+
+def fault(run, row, args):
+    command = ["scripts/faults", "--regime", str(row["regime"]), "--seed", str(row["fault_seed"]), "--count", "1",
+               "--interval", "0", "--first", str(row["n"]), "--out", os.path.join(run.out, "faults.csv"),
+               "--append"]
+    if row["regime"] == 1:
+        command += ["--direction", row["direction"], "--logs", os.path.join(run.out, "logs", "removed")]
+    if row["regime"] == 3:
+        command += ["--victims", row["victim"]]
+    what = {1: f"scale {row['direction']}", 2: "rolling upgrade", 3: f"SIGKILL {row['victim']}"}[row["regime"]]
+    run.say(f"fault #{row['n']}: regime {row['regime']}, {what}")
+    code = run.step(f"fault #{row['n']}", *command, output=f"faults-{row['n']:03d}.txt")
+    if code == 0:
+        run.say(f"fault #{row['n']} done")
+
+
+def log_counts(run):
+    counts = {" ERROR ": 0, " WARN ": 0, "NOGROUP": 0}
+    logs = os.path.join(run.out, "logs")
+    # The slices only: a removed probe's whole log (logs/removed) repeats what they already hold.
+    for name in sorted(n for n in os.listdir(logs) if n.endswith(".txt.gz")):
+        with gzip.open(os.path.join(logs, name), "rt", errors="replace") as f:
+            for line in f:
+                for pattern in counts:
+                    if pattern in line:
+                        counts[pattern] += 1
+    with open(os.path.join(run.out, "log-counts.txt"), "w") as f:
+        for pattern, n in counts.items():
+            f.write(f"{pattern}: {n}\n")
+    run.say("log counts: " + ", ".join(f"{p.strip()} {n}" for p, n in counts.items()))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--seed", type=int, default=3)
+    parser.add_argument("--hours", type=float, default=24)
+    parser.add_argument("--interval", type=float, default=900, help="seconds from one fault to the next")
+    parser.add_argument("--census-every", type=float, default=3600, help="seconds")
+    parser.add_argument("--health-every", type=float, default=15, help="seconds")
+    parser.add_argument("--probes", type=int, default=3, help="probes at the start")
+    parser.add_argument("--delay-ms", type=int, default=3000, help="how long every target takes to answer")
+    parser.add_argument("--warmup", type=float, default=60, help="seconds")
+    parser.add_argument("--grace", type=float, default=30, help="seconds, as scripts/reconcile")
+    parser.add_argument("--out", help="directory; data/long-run/<start>-seed<seed> by default")
+    args = parser.parse_args()
+
+    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    count = int(args.hours * 3600 // args.interval)
+    if count < 1:
+        parser.error("--hours shorter than one --interval: no fault")
+    out = args.out or os.path.join("data", "long-run", f"{utc_now():%Y%m%dT%H%M%SZ}-seed{args.seed}")
+    os.makedirs(out, exist_ok=True)
+    run = Run(out)
+
+    plan = schedule(args.seed, count, args.interval)
+    with open(os.path.join(out, "schedule.csv"), "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(plan[0]))
+        writer.writeheader()
+        writer.writerows(plan)
+    agenor = re.search(r"<agenor.version>(.*?)</agenor.version>", open("pom.xml").read()).group(1)
+    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "."]).returncode != 0
+    # Restart, SIGTERM and SIGKILL behaviour belong to the container runtime, so it is part of the result.
+    runtime = " / ".join(subprocess.run(command, capture_output=True, text=True).stdout.strip().splitlines()[0]
+                         for command in (["docker", "--version"], ["docker", "compose", "version"]))
+    with open(os.path.join(out, "run.txt"), "w") as f:
+        f.write(f"seed={args.seed} hours={args.hours:g} interval={args.interval:g} faults={count} "
+                f"census_every={args.census_every:g} probes={args.probes} delay_ms={args.delay_ms} "
+                f"warmup={args.warmup:g} grace={args.grace:g}\n")
+        f.write(f"regimes: 1={sum(r['regime'] == 1 for r in plan)} 2={sum(r['regime'] == 2 for r in plan)} "
+                f"3={sum(r['regime'] == 3 for r in plan)}; regime 3 victims: "
+                + " ".join(f"{v}={sum(r['victim'] == v for r in plan)}" for v in ("probe", "coordinator", "alerter"))
+                + "\n")
+        f.write(f"agenor={agenor}\ncommit={commit}{'+dirty' if dirty else ''}\nruntime={runtime}\n"
+                f"started={iso(utc_now())}\n")
+    run.say(f"long run: {count} faults every {args.interval:g} s, seed {args.seed}, results in {out}")
+
+    start_stack(run, args)
+    time.sleep(args.warmup)
+    health = Health(run, args.health_every)
+    health.start()
+    logs = Logs(run)
+
+    t0 = time.monotonic()
+    end = t0 + count * args.interval
+    events = [(t0 + r["offset_seconds"], 1, "fault", r) for r in plan]
+    k = 0
+    while k * args.census_every < count * args.interval:
+        events.append((t0 + k * args.census_every, 0, "census", k))
+        k += 1
+    events.sort(key=lambda e: (e[0], e[1]))
+    for at, _, kind, payload in events:
+        time.sleep(max(0.0, at - time.monotonic()))
+        if not health.is_alive():
+            run.error("health", "the sampling thread had died; started again")
+            health = Health(run, args.health_every)
+            health.start()
+        try:
+            if kind == "census":
+                run.step(f"census {payload}", "scripts/census", "--csv", os.path.join(out, "census.csv"))
+                run.say(f"census {payload}")
+            else:
+                logs.save(f"{payload['n']:03d}-before-fault")
+                fault(run, payload, args)
+        except Exception:
+            run.error(f"{kind} {payload}", traceback.format_exc())
+    time.sleep(max(0.0, end - time.monotonic()))
+
+    health.stopping.set()
+    run.step("quiesce", "scripts/quiesce", output="quiesce.txt")
+    run.say("dispatching stopped")
+    time.sleep(args.grace + 5)
+    code = run.step("reconcile", "scripts/reconcile", "--grace", f"{args.grace:g}", "--csv",
+                    os.path.join(out, "ledger.csv"), output="reconcile.txt")
+    if code == 3:
+        run.say("requests still in flight; reconciling again after another grace period")
+        time.sleep(args.grace + 5)
+        run.step("reconcile", "scripts/reconcile", "--grace", f"{args.grace:g}", "--csv",
+                 os.path.join(out, "ledger.csv"), output="reconcile.txt")
+    run.step("timeline", "scripts/timeline", os.path.join(out, "ledger.csv"), os.path.join(out, "faults.csv"),
+             "--slice", "900", "--out", os.path.join(out, "timeline.csv"), output="timeline.txt")
+    run.step("census final", "scripts/census", "--csv", os.path.join(out, "census.csv"))
+    logs.save("999-end")
+    log_counts(run)
+    with open(os.path.join(out, "run.txt"), "a") as f:
+        f.write(f"finished={iso(utc_now())}\n")
+    run.say(f"finished; results in {out}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)

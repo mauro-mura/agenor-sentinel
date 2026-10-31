@@ -128,7 +128,12 @@ final class RedisSnapshot {
 
     /** The mailbox of a node, or null if no such stream exists any more. */
     StreamInfo nodeStream(String nodeId) {
-        return nodeId == null ? null : streams.get(prefix + ":node:" + nodeId);
+        return nodeId == null ? null : streams.get(nodeStreamKey(nodeId));
+    }
+
+    /** The key of a node's mailbox, whether it exists or not; null for a null node id. */
+    String nodeStreamKey(String nodeId) {
+        return nodeId == null ? null : prefix + ":node:" + nodeId;
     }
 
     StreamInfo topicStream(String topic) {
