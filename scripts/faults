@@ -3,6 +3,7 @@
 each one as a CSV row: when, to which container, and which agent and node died and replaced it.
 
     scripts/faults --regime 3 --seed 3 --count 5 --interval 120 --out faults.csv
+    scripts/faults --regime 3 --victims probe,coordinator,alerter --seed 3 --count 6 --interval 120 --out faults.csv
 
 Regime 1 (scale up and down): odd faults scale the probes up to --high, even faults back down to
 --low, with docker compose --scale. Scaling down stops the highest-numbered containers with
@@ -14,9 +15,13 @@ stopped with SIGTERM and started again, which gives it a new agent id and a new 
 next probe is not touched until the replacement is running. One row per probe replaced; the order
 is shuffled by the seed.
 
-Regime 3 (death without goodbye): the JVM of a probe container is killed with SIGKILL from inside
-the container. The container runs under an init process (compose.yml, init: true), so it exits on
-its own and restart: unless-stopped brings it back, with a new agent id and a new node id.
+Regime 3 (death without goodbye): the JVM of a container is killed with SIGKILL from inside the
+container. The container runs under an init process (compose.yml, init: true), so it exits on its
+own and restart: unless-stopped brings it back with a new node id; a probe also gets a new agent
+id, while the coordinator and the alerter keep theirs ('coordinator', 'alerter'). --victims
+names the roles that may die, probe by default; each fault picks one role with the seed, and for a
+probe, one of the probe containers. With --victims probe the choices are the ones earlier runs made
+with the same seed.
 
 Regime 4 (the broker comes back empty): Valkey is stopped, left down for --down seconds (10 by
 default), and started again. compose.yml runs it with no persistence, so it starts with no keys:
@@ -45,7 +50,7 @@ import subprocess
 import sys
 import time
 
-LIFECYCLE = re.compile(r"Agent lifecycle: ([0-9a-f-]{36}) STARTING -> RUNNING")
+LIFECYCLE = re.compile(r"Agent lifecycle: (\S+) STARTING -> RUNNING")
 COLUMNS = ["seed", "n", "regime", "action", "container", "victim_agent_id", "victim_node_id",
            "killed_at", "exit_code", "stop_seconds", "replacement_agent_id", "replacement_node_id",
            "replacement_running_at", "broker_keys_loaded"]
@@ -59,17 +64,26 @@ def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def probe_containers():
-    ids = run("docker", "compose", "ps", "-q", "probe").split()
+def containers(service):
+    ids = run("docker", "compose", "ps", "-q", service).split()
     names = [run("docker", "inspect", "-f", "{{.Name}}", i).strip().lstrip("/") for i in ids]
     # By compose's number, so that probe_10 sorts after probe_9.
     return sorted(names, key=lambda name: int(name.rsplit("_", 1)[1]))
 
 
+def probe_containers():
+    return containers("probe")
+
+
+def starts(container):
+    """The agent id of every start in the container's log, oldest first. The log outlives a restart."""
+    logs = subprocess.run(["docker", "logs", container], capture_output=True, text=True)
+    return LIFECYCLE.findall(logs.stdout + logs.stderr)
+
+
 def running_agent(container):
     """The agent id of the latest start in the container's log, or None before the first start."""
-    logs = subprocess.run(["docker", "logs", container], capture_output=True, text=True)
-    found = LIFECYCLE.findall(logs.stdout + logs.stderr)
+    found = starts(container)
     return found[-1] if found else None
 
 
@@ -79,14 +93,17 @@ def node_of(agent_id):
     return out.strip() or None
 
 
-def wait_for_new_agent(container, previous, timeout):
-    """The first agent id the container reports running other than previous, and when; or Nones."""
+def wait_for_new_agent(container, starts_before, timeout):
+    """The agent id of the first start after the first starts_before ones, and when; or Nones.
+
+    Counted by starts, not compared by id: a probe has a new agent id on every start, but the
+    coordinator and the alerter keep theirs ('coordinator', 'alerter')."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         time.sleep(1)
-        agent = running_agent(container)
-        if agent and agent != previous:
-            return agent, now()
+        found = starts(container)
+        if len(found) > starts_before:
+            return found[starts_before], now()
     print(f"{container} reported no new agent within {timeout} s", file=sys.stderr)
     return None, None
 
@@ -101,11 +118,12 @@ def stop(container, timeout):
 
 
 def replace_probe(container, seed, n, args):
-    victim = running_agent(container)
+    before = starts(container)
+    victim = before[-1] if before else None
     victim_node = node_of(victim) if victim else None
     killed_at, code, took = stop(container, args.stop_timeout)
     run("docker", "start", container)
-    replacement, running_at = wait_for_new_agent(container, victim, args.restart_timeout)
+    replacement, running_at = wait_for_new_agent(container, len(before), args.restart_timeout)
     return dict(seed=seed, n=n, regime=2, action="SIGTERM probe, then start", container=container,
                 victim_agent_id=victim, victim_node_id=victim_node, killed_at=killed_at,
                 exit_code=code, stop_seconds=took, replacement_agent_id=replacement,
@@ -114,9 +132,9 @@ def replace_probe(container, seed, n, args):
 
 
 def rolling_upgrade(rng, seed, n, args):
-    containers = probe_containers()
-    rng.shuffle(containers)
-    return [replace_probe(container, seed, n, args) for container in containers]
+    probes = probe_containers()
+    rng.shuffle(probes)
+    return [replace_probe(container, seed, n, args) for container in probes]
 
 
 def scale(rng, seed, n, args):
@@ -126,7 +144,7 @@ def scale(rng, seed, n, args):
         added_at = now()
         rows = []
         for container in (c for c in probe_containers() if c not in before):
-            agent, running_at = wait_for_new_agent(container, None, args.restart_timeout)
+            agent, running_at = wait_for_new_agent(container, 0, args.restart_timeout)
             rows.append(dict(seed=seed, n=n, regime=1, action=f"scale up to {args.high}", container=container,
                              killed_at=added_at, replacement_agent_id=agent,
                              replacement_node_id=node_of(agent) if agent else None,
@@ -168,15 +186,18 @@ def restart_broker(rng, seed, n, args):
                  replacement_running_at=running_at, broker_keys_loaded=loaded)]
 
 
-def kill_probe(rng, seed, n, args):
-    container = rng.choice(probe_containers())
-    victim = running_agent(container)
+def kill_jvm(rng, seed, n, args):
+    role = rng.choice(args.victims) if len(args.victims) > 1 else args.victims[0]
+    candidates = containers(role)
+    container = rng.choice(candidates) if role == "probe" else candidates[0]
+    before = starts(container)
+    victim = before[-1] if before else None
     victim_node = node_of(victim) if victim else None
     killed_at = now()
     run("docker", "exec", container, "sh", "-c", "kill -9 $(pgrep -x java)")
 
-    replacement, running_at = wait_for_new_agent(container, victim, args.restart_timeout)
-    return [dict(seed=seed, n=n, regime=3, action="SIGKILL probe JVM", container=container,
+    replacement, running_at = wait_for_new_agent(container, len(before), args.restart_timeout)
+    return [dict(seed=seed, n=n, regime=3, action=f"SIGKILL {role} JVM", container=container,
                  victim_agent_id=victim, victim_node_id=victim_node, killed_at=killed_at,
                  replacement_agent_id=replacement,
                  replacement_node_id=node_of(replacement) if replacement else None,
@@ -194,8 +215,14 @@ def main():
     parser.add_argument("--down", type=float, default=10, help="regime 4: seconds the broker stays down")
     parser.add_argument("--low", type=int, default=2, help="regime 1: probes after scaling down")
     parser.add_argument("--high", type=int, default=5, help="regime 1: probes after scaling up")
+    parser.add_argument("--victims", default="probe",
+                        help="regime 3: comma-separated roles that may die, among probe, coordinator, alerter")
     parser.add_argument("--out", required=True, help="CSV file, one row per fault")
     args = parser.parse_args()
+    args.victims = args.victims.split(",")
+    unknown = set(args.victims) - {"probe", "coordinator", "alerter"}
+    if unknown:
+        parser.error(f"unknown victims: {', '.join(sorted(unknown))}")
 
     rng = random.Random(args.seed)
     with open(args.out, "w", newline="") as f:
@@ -203,7 +230,7 @@ def main():
         writer.writeheader()
         for n in range(1, args.count + 1):
             started = time.monotonic()
-            fault = {1: scale, 2: rolling_upgrade, 3: kill_probe, 4: restart_broker}[args.regime]
+            fault = {1: scale, 2: rolling_upgrade, 3: kill_jvm, 4: restart_broker}[args.regime]
             for row in fault(rng, args.seed, n, args):
                 writer.writerow(row)
                 f.flush()
