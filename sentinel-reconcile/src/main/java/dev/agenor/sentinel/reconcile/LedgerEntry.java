@@ -14,12 +14,13 @@ import java.time.Instant;
  *                        time zone), or {@code null}
  * @param probeLastHeartbeat the same {@code last_seen} as an instant ({@code last_seen} is written in
  *                        UTC), or {@code null}
- * @param senderId        the agent id of the coordinator that sent the request, or {@code null} for
- *                        rows written before the ledger recorded it
- * @param senderNodeId    the node id of the sender's directory row, or {@code null} when it has no
- *                        row left
- * @param senderLastHeartbeat the {@code last_seen} of the sender's directory row, or {@code null} when
- *                        it has no row left
+ * @param senderId        the agent id of the coordinator that sent the request, the same on every
+ *                        start; {@code null} for rows written before the ledger recorded it
+ * @param senderNodeId    the node the sender's mail was routed to when it sent the request, or
+ *                        {@code null}
+ * @param senderCurrentNodeId the node of the sender's directory row now, or {@code null} when it has
+ *                        no row: a restarted coordinator overwrites the row of the one before
+ * @param senderNodeLastSent the latest request in the ledger sent from {@code senderNodeId}
  * @param outcomeApplied  whether the alerter recorded the outcome in {@code outcome_seen}
  */
 record LedgerEntry(
@@ -34,7 +35,8 @@ record LedgerEntry(
         Instant probeLastHeartbeat,
         String senderId,
         String senderNodeId,
-        Instant senderLastHeartbeat,
+        String senderCurrentNodeId,
+        Instant senderNodeLastSent,
         Instant repliedAt,
         String replyPerformative,
         Instant errorAt,

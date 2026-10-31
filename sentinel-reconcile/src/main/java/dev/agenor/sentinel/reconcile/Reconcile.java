@@ -45,7 +45,8 @@ public final class Reconcile {
 
     private static final List<String> COLUMNS = List.of(
             "request_id", "created_at", "target_id", "probe_id", "probe_node_id", "probe_node_status",
-            "probe_node_last_seen", "sender_id", "sender_node_id", "sender_last_seen",
+            "probe_node_last_seen", "sender_id", "sender_node_id", "sender_current_node_id",
+            "sender_node_last_sent",
             "state", "cause", "request_location", "request_key", "request_entry_id", "deliveries", "consumer",
             "reply_key", "reply_delivery",
             "reply_performative", "error_class", "error_message", "outcome");
@@ -177,7 +178,7 @@ public final class Reconcile {
             List<Object> row = List.of(
                     e.requestId(), e.createdAt(), e.targetId(), e.probeId(), nz(e.probeNodeId()),
                     nz(e.probeNodeStatus()), nz(e.probeNodeLastSeen()), nz(e.senderId()),
-                    nz(e.senderNodeId()), nz(e.senderLastHeartbeat()), v.state(), v.cause(), v.location(),
+                    nz(e.senderNodeId()), nz(e.senderCurrentNodeId()), nz(e.senderNodeLastSent()), v.state(), v.cause(), v.location(),
                     request == null ? "" : request.key(), request == null ? "" : request.entryId(),
                     request == null ? "" : request.deliveries(),
                     request == null ? "" : nz(request.consumer()),

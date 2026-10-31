@@ -1,6 +1,7 @@
 package dev.agenor.sentinel.coordinator;
 
 import dev.agenor.core.AgentDescriptor;
+import dev.agenor.core.AgentEndpoint;
 import dev.agenor.core.AgentStatus;
 import dev.agenor.core.Message;
 import dev.agenor.core.annotations.Agent;
@@ -58,10 +59,21 @@ public class CoordinatorAgent extends BaseAgent {
             log.warn("{} target(s) due and no live probe in the directory", due.size());
             return;
         }
+        String ownNode = ownNode();
         for (Targets.Target target : due) {
             AgentDescriptor probe = probes.get((int) Math.floorMod(next.getAndIncrement(), (long) probes.size()));
-            dispatch(target, probe);
+            dispatch(target, probe, ownNode);
         }
+    }
+
+    /**
+     * The node other nodes route this agent's mail to, so where the probes' replies go: what
+     * {@code resolveEndpoint} answers for this agent's own id, the lookup every {@code sendTo} makes.
+     * The agent id stays {@code coordinator} across restarts and the node id does not, so only the
+     * node tells one life of the coordinator from the next in the ledger. Null if unresolved.
+     */
+    private String ownNode() {
+        return agentDirectory.resolveEndpoint(getAgentId()).join().map(AgentEndpoint::nodeId).orElse(null);
     }
 
     /**
@@ -86,10 +98,10 @@ public class CoordinatorAgent extends BaseAgent {
         return live;
     }
 
-    private void dispatch(Targets.Target target, AgentDescriptor probe) {
+    private void dispatch(Targets.Target target, AgentDescriptor probe, String ownNode) {
         UUID requestId = UUID.randomUUID();
         String nodeId = probe.endpoint() == null ? null : probe.endpoint().nodeId();
-        ledger.recordSent(requestId, getAgentId(), target.id(), probe.agentId(), nodeId);
+        ledger.recordSent(requestId, getAgentId(), ownNode, target.id(), probe.agentId(), nodeId);
 
         var check = new CheckRequest(requestId.toString(), target.id(), target.url(), CHECK_TIMEOUT_MILLIS);
         dialogue.request(probe.agentId(), check, REQUEST_TIMEOUT)

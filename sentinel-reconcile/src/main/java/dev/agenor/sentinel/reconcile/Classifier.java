@@ -37,11 +37,21 @@ final class Classifier {
     enum State { ANSWERED, DEAD_LETTERED, TIMED_OUT, IN_FLIGHT, LOST }
 
     /**
-     * Which end of an unanswered request stopped while it was open. An end stopped while the request
-     * was open when its last heartbeat ({@code last_seen}) is older than the request plus the
-     * request timeout: alive past that moment, it would have heartbeated after it. An end with no
-     * directory row left is not counted as stopped, since nothing says when it left: an orderly
-     * stop removes the row, and the stop may have come long after the request.
+     * Which end of an unanswered request stopped while it was open: before the request timeout ran
+     * out. The two ends are told apart in different ways, because their identities differ.
+     * <ul>
+     *   <li>A probe has a new agent id on every start, and a probe killed without goodbye leaves its
+     *       row behind. It stopped in time when its last heartbeat ({@code last_seen}) is older than
+     *       the request plus the timeout: alive past that moment, it would have heartbeated after
+     *       it. A probe with no row left is not counted, since nothing says when it left: an orderly
+     *       stop removes the row, and the stop may have come long after the request.</li>
+     *   <li>The coordinator's agent id is the same on every start, and the new one overwrites the
+     *       row of the one before, so its heartbeat says nothing about a past life. Its node does:
+     *       the sender stopped when its directory row now names another node, or none, and it
+     *       stopped in time when that node's last request in the ledger came less than the timeout
+     *       after this one. The coordinator sends every round while targets are due, so its last
+     *       request falls within a round of its death.</li>
+     * </ul>
      */
     enum Cause {
         /** The probe stopped; the coordinator did not. */
@@ -56,7 +66,7 @@ final class Classifier {
         BOTH_STOPPED,
         /** Neither stopped while the request was open. */
         NONE,
-        /** An answered request, or a ledger row with no sender recorded. */
+        /** An answered request, or a ledger row with no sender node recorded. */
         NOT_APPLICABLE
     }
 
@@ -127,20 +137,17 @@ final class Classifier {
     }
 
     private static Cause cause(LedgerEntry entry) {
-        if (entry.senderId() == null) {
+        if (entry.senderNodeId() == null) {
             return Cause.NOT_APPLICABLE;
         }
         Instant timedOutAt = entry.createdAt().plusSeconds(REQUEST_TIMEOUT_SECONDS);
-        boolean probe = stoppedBefore(entry.probeLastHeartbeat(), timedOutAt);
-        boolean sender = stoppedBefore(entry.senderLastHeartbeat(), timedOutAt);
+        boolean probe = entry.probeLastHeartbeat() != null && entry.probeLastHeartbeat().isBefore(timedOutAt);
+        boolean sender = !entry.senderNodeId().equals(entry.senderCurrentNodeId())
+                && entry.senderNodeLastSent() != null && entry.senderNodeLastSent().isBefore(timedOutAt);
         if (probe && sender) {
             return Cause.BOTH_STOPPED;
         }
         return sender ? Cause.SENDER_STOPPED : probe ? Cause.PROBE_STOPPED : Cause.NONE;
-    }
-
-    private static boolean stoppedBefore(Instant lastHeartbeat, Instant moment) {
-        return lastHeartbeat != null && lastHeartbeat.isBefore(moment);
     }
 
     private static Location location(LedgerEntry entry, Sighting request, StreamInfo probeStream) {

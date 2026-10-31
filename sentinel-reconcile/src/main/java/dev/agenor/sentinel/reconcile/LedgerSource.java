@@ -24,18 +24,19 @@ final class LedgerSource {
                    (SELECT max(a.last_seen) AT TIME ZONE 'UTC'
                       FROM agenor_agents a
                      WHERE a.node_id = l.probe_node_id) AS probe_last_heartbeat,
-                   l.sender_id,
+                   l.sender_id, l.sender_node_id,
                    (SELECT min(a.node_id)
                       FROM agenor_agents a
-                     WHERE a.agent_id = l.sender_id) AS sender_node_id,
-                   (SELECT max(a.last_seen) AT TIME ZONE 'UTC'
-                      FROM agenor_agents a
-                     WHERE a.agent_id = l.sender_id) AS sender_last_heartbeat,
+                     WHERE a.agent_id = l.sender_id) AS sender_current_node_id,
+                   s.last_sent AS sender_node_last_sent,
                    l.replied_at, l.reply_performative,
                    l.error_at, l.error_class, l.error_message,
                    o.request_id IS NOT NULL AS outcome_applied
               FROM ledger l
               LEFT JOIN outcome_seen o ON o.request_id = l.request_id
+              LEFT JOIN (SELECT sender_node_id, max(created_at) AS last_sent
+                           FROM ledger
+                          GROUP BY sender_node_id) s ON s.sender_node_id = l.sender_node_id
              ORDER BY l.created_at, l.request_id
             """;
 
@@ -58,7 +59,8 @@ final class LedgerSource {
                         instant(rs, "probe_last_heartbeat"),
                         rs.getString("sender_id"),
                         rs.getString("sender_node_id"),
-                        instant(rs, "sender_last_heartbeat"),
+                        rs.getString("sender_current_node_id"),
+                        instant(rs, "sender_node_last_sent"),
                         instant(rs, "replied_at"),
                         rs.getString("reply_performative"),
                         instant(rs, "error_at"),

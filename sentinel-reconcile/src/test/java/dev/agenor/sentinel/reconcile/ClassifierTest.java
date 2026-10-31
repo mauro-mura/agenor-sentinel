@@ -21,9 +21,11 @@ class ClassifierTest {
     static final Instant SENT = Instant.parse("2026-10-29T21:27:58.505Z");
     static final String NODE = "837b34eb-f44b-45fa-aea9-5d12c84dff9d";
     static final String NODE_STREAM = "sentinel:node:" + NODE;
-    static final String SENDER = "c0a1b2c3-0000-4000-8000-000000000001";
     static final String SENDER_NODE = "5e4d3c2b-0000-4000-8000-000000000002";
     static final String SENDER_STREAM = "sentinel:node:" + SENDER_NODE;
+    static final String OTHER_NODE = "9a8b7c6d-0000-4000-8000-000000000003";
+    static final Instant BEFORE_TIMEOUT = SENT.plusSeconds(Classifier.REQUEST_TIMEOUT_SECONDS - 1);
+    static final Instant AFTER_TIMEOUT = SENT.plusSeconds(Classifier.REQUEST_TIMEOUT_SECONDS + 1);
     static final double GRACE = 30;
 
     /** A probe stream whose first entry is older than the request: nothing was trimmed. */
@@ -127,27 +129,38 @@ class ClassifierTest {
     }
 
     @Test
-    void anEndStoppedWhileTheRequestWasOpenWhenItsLastHeartbeatCameBeforeTheTimeout() {
-        Instant before = SENT.plusSeconds(Classifier.REQUEST_TIMEOUT_SECONDS - 1);
-        Instant after = SENT.plusSeconds(Classifier.REQUEST_TIMEOUT_SECONDS + 1);
-
-        assertThat(cause(entry(60).probeHeartbeat(before).senderHeartbeat(after))).isEqualTo(Cause.PROBE_STOPPED);
-        assertThat(cause(entry(60).probeHeartbeat(after).senderHeartbeat(before))).isEqualTo(Cause.SENDER_STOPPED);
-        assertThat(cause(entry(60).probeHeartbeat(before).senderHeartbeat(before))).isEqualTo(Cause.BOTH_STOPPED);
-        assertThat(cause(entry(60).probeHeartbeat(after).senderHeartbeat(after))).isEqualTo(Cause.NONE);
+    void aProbeStoppedWhileTheRequestWasOpenWhenItsLastHeartbeatCameBeforeTheTimeout() {
+        assertThat(cause(entry(60).probeHeartbeat(BEFORE_TIMEOUT))).isEqualTo(Cause.PROBE_STOPPED);
+        assertThat(cause(entry(60).probeHeartbeat(AFTER_TIMEOUT))).isEqualTo(Cause.NONE);
     }
 
     @Test
-    void anEndWithNoDirectoryRowIsNotCountedAsStopped() {
-        Instant after = SENT.plusSeconds(Classifier.REQUEST_TIMEOUT_SECONDS + 1);
+    void aProbeWithNoDirectoryRowIsNotCountedAsStopped() {
+        assertThat(cause(entry(60).probeHeartbeat(null))).isEqualTo(Cause.NONE);
+    }
 
-        assertThat(cause(entry(60).probeHeartbeat(null).senderHeartbeat(after))).isEqualTo(Cause.NONE);
-        assertThat(cause(entry(60).probeHeartbeat(after).senderHeartbeat(null))).isEqualTo(Cause.NONE);
+    @Test
+    void theSenderStoppedWhenItsRowNamesAnotherNodeAndItsNodeSentNothingPastTheTimeout() {
+        assertThat(cause(entry(60).senderReplacedBy(OTHER_NODE).senderNodeLastSent(BEFORE_TIMEOUT)))
+                .isEqualTo(Cause.SENDER_STOPPED);
+        assertThat(cause(entry(60).senderReplacedBy(null).senderNodeLastSent(BEFORE_TIMEOUT)))
+                .isEqualTo(Cause.SENDER_STOPPED);
+        // Replaced, but it went on sending long after this request: it was alive when the request timed out.
+        assertThat(cause(entry(60).senderReplacedBy(OTHER_NODE).senderNodeLastSent(AFTER_TIMEOUT)))
+                .isEqualTo(Cause.NONE);
+        // Its row still names its node: it is the coordinator running now.
+        assertThat(cause(entry(60).senderNodeLastSent(BEFORE_TIMEOUT))).isEqualTo(Cause.NONE);
+    }
+
+    @Test
+    void bothEndsStopped() {
+        assertThat(cause(entry(60).probeHeartbeat(BEFORE_TIMEOUT).senderReplacedBy(OTHER_NODE)
+                .senderNodeLastSent(BEFORE_TIMEOUT))).isEqualTo(Cause.BOTH_STOPPED);
     }
 
     @Test
     void theCauseNeverChangesTheState() {
-        var lost = entry(60).senderHeartbeat(SENT);
+        var lost = entry(60).senderReplacedBy(OTHER_NODE).senderNodeLastSent(SENT);
 
         Verdict v = Classifier.classify(lost.build(), List.of(request(Delivery.DELIVERED, false), reply()),
                 PROBE_STREAM, TOPIC, GRACE);
@@ -160,7 +173,7 @@ class ClassifierTest {
     }
 
     @Test
-    void aRowWithNoSenderRecordedHasNoCause() {
+    void aRowWithNoSenderNodeRecordedHasNoCause() {
         assertThat(cause(entry(60).probeHeartbeat(SENT).noSender())).isEqualTo(Cause.NOT_APPLICABLE);
     }
 
@@ -193,9 +206,10 @@ class ClassifierTest {
         private String performative;
         private Instant errorAt;
         private boolean applied;
-        private String senderId = SENDER;
+        private String senderNode = SENDER_NODE;
+        private String senderCurrentNode = SENDER_NODE;
+        private Instant senderNodeLastSent = SENT.plusSeconds(60);
         private Instant probeHeartbeat = SENT.plusSeconds(60);
-        private Instant senderHeartbeat = SENT.plusSeconds(60);
 
         EntryBuilder(double age) {
             this.age = age;
@@ -206,13 +220,18 @@ class ClassifierTest {
             return this;
         }
 
-        EntryBuilder senderHeartbeat(Instant at) {
-            this.senderHeartbeat = at;
+        EntryBuilder senderReplacedBy(String node) {
+            this.senderCurrentNode = node;
+            return this;
+        }
+
+        EntryBuilder senderNodeLastSent(Instant at) {
+            this.senderNodeLastSent = at;
             return this;
         }
 
         EntryBuilder noSender() {
-            this.senderId = null;
+            this.senderNode = null;
             return this;
         }
 
@@ -235,7 +254,7 @@ class ClassifierTest {
         LedgerEntry build() {
             return new LedgerEntry("34756dd8-19a8-4223-8767-43da5fc41926", SENT, age, 1,
                     "e100ca15-5d24-4cfa-8a20-a60d0b46d783", NODE, "RUNNING", "2026-10-29 21:27:51.39475",
-                    probeHeartbeat, senderId, senderId == null ? null : SENDER_NODE, senderHeartbeat,
+                    probeHeartbeat, "coordinator", senderNode, senderCurrentNode, senderNodeLastSent,
                     repliedAt, performative,
                     errorAt, errorAt == null ? null : "java.util.concurrent.TimeoutException", null, applied);
         }

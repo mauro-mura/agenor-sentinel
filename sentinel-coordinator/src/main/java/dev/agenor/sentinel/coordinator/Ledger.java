@@ -17,13 +17,15 @@ class Ledger {
         this.jdbc = jdbc;
     }
 
-    void recordSent(UUID requestId, String senderId, long targetId, String probeId, String probeNodeId) {
+    void recordSent(UUID requestId, String senderId, String senderNodeId, long targetId, String probeId,
+                    String probeNodeId) {
         jdbc.sql("""
-                        INSERT INTO ledger (request_id, sender_id, target_id, probe_id, probe_node_id)
-                        VALUES (:id, :sender, :target, :probe, :node)
+                        INSERT INTO ledger (request_id, sender_id, sender_node_id, target_id, probe_id, probe_node_id)
+                        VALUES (:id, :sender, :senderNode, :target, :probe, :node)
                         """)
                 .param("id", requestId)
                 .param("sender", senderId)
+                .param("senderNode", senderNodeId)
                 .param("target", targetId)
                 .param("probe", probeId)
                 .param("node", probeNodeId)
