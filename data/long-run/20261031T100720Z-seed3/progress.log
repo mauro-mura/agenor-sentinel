@@ -1,0 +1,23 @@
+2026-10-31T10:07:21.041Z long run: 8 faults every 900 s, seed 3, results in data/long-run/20261031T100720Z-seed3
+2026-10-31T10:07:51.761Z stack up: 3 probes, 5 targets slowed to 3000 ms
+2026-10-31T10:09:00.408Z census 0
+2026-10-31T10:09:02.529Z fault #1: regime 2, rolling upgrade
+2026-10-31T10:09:33.293Z fault #1 done
+2026-10-31T10:23:53.929Z fault #2: regime 3, SIGKILL probe
+2026-10-31T10:24:04.719Z fault #2 done
+2026-10-31T10:38:54.069Z fault #3: regime 3, SIGKILL alerter
+2026-10-31T10:39:05.973Z fault #3 done
+2026-10-31T10:53:53.973Z fault #4: regime 1, scale up
+2026-10-31T10:54:07.504Z fault #4 done
+2026-10-31T11:09:00.162Z census 1
+2026-10-31T11:09:02.363Z fault #5: regime 1, scale down
+2026-10-31T11:09:12.861Z fault #5 done
+2026-10-31T11:23:53.908Z fault #6: regime 1, scale up
+2026-10-31T11:24:11.066Z fault #6 done
+2026-10-31T11:38:54.184Z fault #7: regime 2, rolling upgrade
+2026-10-31T11:39:46.137Z fault #7 done
+2026-10-31T11:53:54.116Z fault #8: regime 3, SIGKILL coordinator
+2026-10-31T11:54:05.925Z fault #8 done
+2026-10-31T12:08:53.555Z dispatching stopped
+2026-10-31T12:09:41.601Z log counts: ERROR 5, WARN 21, NOGROUP 0
+2026-10-31T12:09:41.601Z finished; results in data/long-run/20261031T100720Z-seed3

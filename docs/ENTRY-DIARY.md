@@ -220,3 +220,18 @@ database it needs two. Recorded as **F2** in `FINDINGS.md`. (Q1)
 
 No source reading was needed: the setting is on `adapters/jdbc-directory`, in a tip addressed to
 applications that configure Flyway by hand.
+
+## After the entry: a start that lost a race
+
+Added on 2026-11-01, from the dress rehearsal of the long run on 2026-10-31. Three probes started
+together on an empty database and one of them died in Agenor's own migration, then came up when the
+orchestrator restarted it. Neither `adapters/jdbc-directory` nor `spring-boot-starter` mentions
+processes starting at the same moment. Recorded as **F6** in `FINDINGS.md`. (Q1)
+
+The same run left replies in the stream of a dead coordinator, and no page says where such a reply
+goes. Recorded as **F7**. (Q1)
+
+To tell one life of the coordinator from the next, the application needs its own node id. No page
+says how; the Javadoc of `AgentResolver` led to `resolveEndpoint` on the agent's own id. (Q1)
+
+No source reading was needed for any of the three.

@@ -1,0 +1,9 @@
+n,offset_seconds,regime,victim,direction,fault_seed
+1,0,2,,,3001
+2,900,3,probe,,3002
+3,1800,3,alerter,,3003
+4,2700,1,,up,3004
+5,3600,1,,down,3005
+6,4500,1,,up,3006
+7,5400,2,,,3007
+8,6300,3,coordinator,,3008

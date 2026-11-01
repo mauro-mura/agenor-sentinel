@@ -292,6 +292,62 @@ Documentation gaps met on the way in are recorded first in the entry diary
 - **Missing capability, phrased as CRITERION §5 point 3 asks:** a node whose broker has lost its
   consumer groups either reads again or says, where an orchestrator looks, that it cannot.
 
+## F6. Processes that start together on an empty database can fail Agenor's own migration
+
+- **Kind:** behavioural defect. It is loud and an orchestrator's restart cures it, but the page
+  calls the migration idempotent and gives several JVMs one database, and says nothing of a start
+  that fails because another one is under way.
+- **Version:** 0.39.0, with `agenor-spring-boot-starter` on Spring Boot 4.0.9 (Flyway 11.14.1), JDBC
+  directory on PostgreSQL 16.15.
+- **What the pages say:** `adapters/jdbc-directory`: the migration "runs on every
+  JdbcAgentDirectory.create() call", "Calling it again is idempotent", and "Two JVMs can share the
+  same database to form a logical cluster". `spring-boot-starter`: "Flyway schema migration runs
+  automatically on startup". Neither page mentions processes starting at the same moment.
+- **What happened:** at the start of the dress rehearsal below, three probes reached the migration
+  within 60 ms on an empty database. `probe_1` created the history table at 10:07:48.765 UTC.
+  `probe_2`, at 10:07:48.803, tried to baseline, found that table still empty, and the process
+  ended:
+
+  ```
+  FlywayException: Unable to baseline schema history table
+  "public"."agenor_directory_schema_history" as it already exists, and is empty.
+  ```
+
+  `probe_1` began to migrate at 10:07:48.849. `restart: unless-stopped` started `probe_2` again at
+  10:07:50.210, and it was running by 10:07:55. Evidence: `data/long-run/20261031T100720Z-seed3/logs/001-before-fault.txt.gz`.
+- **How often:** once in the 8 runs that kept their logs: this one, four in `data/q6` and
+  `data/regime4`, and three short trials whose data was not kept. The other four runs in `data/`
+  kept no logs and cannot say. It is a race, so this is not a rate.
+- **What it costs:** one restart here. Without an orchestrator, the process that loses the race
+  stays down. Neither page gives a setting for it; starting one process first would avoid it.
+- **In memory (CRITERION §5, point 7):** the case does not exist; the in-memory directory has no
+  schema.
+- **Missing capability, phrased as CRITERION §5 point 3 asks:** the processes of an application
+  can start together on an empty database, and each comes up at its first attempt.
+
+## F7. No page says where a reply goes when its requester has died
+
+- **Kind:** documentation defect. The loss of the request itself is documented; what becomes of the
+  reply is not.
+- **Version:** 0.39.0, Redis transport, the starter in all three roles.
+- **What the pages say:** `dialog-protocol`: "Conversation state is held in memory, in the agent's
+  own process", "every in-flight conversation it was tracking is gone", and a future "cannot be
+  recovered by any means". So a requester's death losing its open requests is documented. The only
+  reply the page follows is "a reply that reaches an agent restarted since it opened the
+  conversation", which "opens a new one in INITIATED". `adapters/redis`: "A node that never comes
+  back keeps a stream. Nothing expires it". No page puts the two together.
+- **What happened:** the coordinator is an agent with a fixed id (`coordinator`), and the starter
+  gives each start a new node id. It was killed at 11:53:57 in the dress rehearsal below, with 3
+  requests open. The probes answered all 3, and all 3 replies are unread in the stream of the dead
+  node, not with its replacement. The ledger has them as lost, cause `SENDER_STOPPED`. The case the
+  page describes, a reply reaching the restarted agent, was not seen.
+- **Against CRITERION §4:** a coordinator that dies leaves requests with no reply and no error, so
+  the ledger's definition makes them lost, and it stays that way: `scripts/reconcile` adds a cause
+  to the state and never changes the state. Q2's rule that a lost message is a defect unless a page
+  allows it was written for a dead probe. For a dead requester, the page allows it.
+- **Missing page:** what happens to a reply whose requester died before it arrived, for a requester
+  with a fixed id and a new node id.
+
 ## O1. Outcomes published while the alerter is not subscribed never reach it
 
 - **Kind:** observation of documented behaviour; not a defect. To be measured under regime 3.
@@ -713,3 +769,65 @@ open case again.
   grows is Q5's.
 - **O1 again, at start-up.** The `throw` run has 5 outcomes published and never applied, all
   between 16:08:04.351 and 16:08:04.399 UTC; the alerter subscribed at 16:08:04.746.
+
+## The dress rehearsal of the long run: the scripts hold, and Q5's estimate is too low
+
+- **Kind:** a rehearsal, not an outcome. Q5 stays open until the 24-hour run.
+- **Version and configuration:** as in Q4: 0.39.0, the starter in all three roles, JDBC directory
+  and presence, Valkey at a fixed address (F4). Same orchestrator.
+- **Run:** `scripts/long-run --hours 2`, on commit `9a019be`, 2026-10-31 from 10:07:21 to 12:09:41
+  UTC. Three probes at the start; 8 faults at seed 3, one every 15 minutes, as `schedule.csv` lists:
+  3 of regime 1, 2 of regime 2, 3 of regime 3 (a probe, the alerter, the coordinator). Data:
+  `data/long-run/20261031T100720Z-seed3/`.
+- **The scripts:** every fault finished, with no `errors.log`. Before this run, three short trials
+  found that `up --scale` had been refused since F4's fixed address, and that `scale` left stopped
+  containers for the next rolling upgrade to start again. Both are fixed in `scripts/faults`.
+
+### The ledger
+
+| State | Requests | Cause |
+|---|---:|---|
+| answered | 2445 | |
+| timed out | 4 | `PROBE_STOPPED`: the probe killed at 10:23:57 |
+| timed out | 3 | `NONE`: orderly stops, with the request pending in the stopped node's stream (F3) |
+| lost | 3 | `SENDER_STOPPED`: the coordinator killed at 11:53:57 (F7) |
+
+No lost request lacks an explanation. A timed-out request has cause `NONE` here because an orderly
+stop removes the directory row, and a node with no row is not counted as stopped.
+
+### O1, measured once
+
+The alerter was killed at 10:38:57 and subscribed again at 10:39:03.561 UTC. The 2 replies recorded
+at 10:38:58 are `PUBLISHED_NOT_APPLIED`; the next one, at 10:39:04.110, was applied. So O1 happens
+under regime 3, as its entry expected. One kill does not say how often. Four trial runs, whose data
+was not kept, had one alerter kill each: one left 2 outcomes unapplied, from requests sent just after
+the kill, and three left none. The 24-hour run has 11 kills to count.
+
+### What grows
+
+| | Start | After 2 h |
+|---|---:|---:|
+| Node streams | 5 | 21 |
+| Consumer groups | 6 | 23 |
+| Directory rows | 5 | 8 |
+| Stream entries | 71 | 7348 |
+| Valkey memory | 1.35 MB | 6.79 MB |
+
+Node streams grew by exactly the 16 new nodes in `faults.csv`, and none went away. Consumer groups
+grew by those 16 and by 1 for the alerter's restart. Three censuses give no slope, and this schedule
+is not the 24-hour one.
+
+### Against CRITERION §7
+
+- **"Node streams grow by one per restart": confirmed so far.**
+- **"Topic groups grow by one per alerter restart": confirmed once.**
+- **"In 24 hours, at one failure every 15 minutes, that is about 96 orphaned keys": refuted as an
+  estimate, pending the run.** It counts one restart per failure, and here a failure made 2 new nodes
+  on average: a rolling upgrade or a scale up makes several. Applying each fault of the 24-hour
+  schedule at seed 3 gives 189 new nodes, so 194 node streams. That is a projection, not a
+  measure; the same calculation gives the 16 measured here.
+
+### Limits of this run
+
+- The health of the processes was sampled every 21 s on average: 15 s is the pause between samples.
+- It ran on the same orchestrator as Q2-Q7, so it says nothing about real Docker.

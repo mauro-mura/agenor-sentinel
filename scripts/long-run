@@ -22,7 +22,8 @@ shorter: --hours 2 makes 8.
 
 Along the way:
   - scripts/census every --census-every seconds (3600), into census.csv;
-  - scripts/health every 15 s, into health.csv, from a thread that is restarted if it dies;
+  - scripts/health with a pause of 15 s between samples, into health.csv, from a thread that is
+    restarted if it dies;
   - the logs of the coordinator, the alerter and every probe, saved before each fault and at the
     end, in compressed slices (logs/), and the whole log of each probe a scale down removes
     (logs/removed), which would go with the container.
@@ -137,7 +138,7 @@ def start_stack(run, args):
 
 
 class Health(threading.Thread):
-    """scripts/health every 15 s. Its own failures are recorded; it stops only when asked."""
+    """scripts/health, then a pause. Its own failures are recorded; it stops only when asked."""
 
     def __init__(self, run, every):
         super().__init__(daemon=True)
@@ -217,7 +218,7 @@ def main():
     parser.add_argument("--hours", type=float, default=24)
     parser.add_argument("--interval", type=float, default=900, help="seconds from one fault to the next")
     parser.add_argument("--census-every", type=float, default=3600, help="seconds")
-    parser.add_argument("--health-every", type=float, default=15, help="seconds")
+    parser.add_argument("--health-every", type=float, default=15, help="seconds of pause between samples")
     parser.add_argument("--probes", type=int, default=3, help="probes at the start")
     parser.add_argument("--delay-ms", type=int, default=3000, help="how long every target takes to answer")
     parser.add_argument("--warmup", type=float, default=60, help="seconds")
