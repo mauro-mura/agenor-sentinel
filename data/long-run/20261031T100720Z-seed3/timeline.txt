@@ -1,0 +1,11 @@
+Requests by the 900 s slice they were sent in (UTC)
+  slice      sent  answ t/out   dlq   fly  lost  appl  fault
+  10:07:53    307   306     1     0     0     0   306  #1 SIGTERM probe, then start; #1 SIGTERM probe, then start; #1 SIGTERM probe, then start
+  10:22:53    303   299     4     0     0     0   299  #2 SIGKILL probe JVM
+  10:37:53    305   305     0     0     0     0   303  #3 SIGKILL alerter JVM
+  10:52:53    305   305     0     0     0     0   305  #4 scale up to 5; #4 scale up to 5
+  11:07:53    305   304     1     0     0     0   304  #5 scale down to 2; #5 scale down to 2; #5 scale down to 2
+  11:22:53    303   303     0     0     0     0   303  #6 scale up to 5; #6 scale up to 5; #6 scale up to 5
+  11:37:53    303   302     1     0     0     0   302  #7 SIGTERM probe, then start; #7 SIGTERM probe, then start; #7 SIGTERM probe, then start; #7 SIGTERM probe, then start; #7 SIGTERM probe, then start
+  11:52:53    302   299     0     0     0     3   299  #8 SIGKILL coordinator JVM
+  12:07:53     22    22     0     0     0     0    22

@@ -1,0 +1,7 @@
+seed=3 hours=2 interval=900 faults=8 census_every=3600 probes=3 delay_ms=3000 warmup=60 grace=30
+regimes: 1=3 2=2 3=3; regime 3 victims: probe=1 coordinator=1 alerter=1
+agenor=0.39.0
+commit=9a019be
+runtime=podman version 4.9.3 / docker-compose version 1.29.2, build unknown
+started=2026-10-31T10:07:21.041Z
+finished=2026-10-31T12:09:41.601Z
