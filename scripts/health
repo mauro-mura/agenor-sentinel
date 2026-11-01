@@ -45,7 +45,9 @@ def health(container):
     result = subprocess.run(["docker", "exec", container, "busybox", "wget", "-qO-", "-T", "5", URL],
                             capture_output=True, text=True)
     if result.returncode != 0:
-        error = " ".join((result.stderr or "").split())
+        # Podman's Docker emulation prints a notice on stderr before the real error.
+        lines = (result.stderr or "").splitlines()
+        error = " ".join(" ".join(l for l in lines if not l.startswith("Emulate Docker CLI")).split())
         status = "DOWN" if "503" in error else "UNREACHABLE"
         return dict(status=status, error=error)
     body = json.loads(result.stdout)
