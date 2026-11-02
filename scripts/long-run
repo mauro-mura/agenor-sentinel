@@ -29,7 +29,8 @@ Along the way:
     (logs/removed), which would go with the container.
 A step that fails is written to errors.log and the run goes on: one bad fault must not cost the
 other ninety-five. At the end the dispatching is stopped (scripts/quiesce), and after the grace
-period come the ledger (scripts/reconcile), the timeline and a last census.
+period come the ledger (scripts/reconcile), the timeline, a last census and the report
+(scripts/long-run-report), with its copy of what lives only in the stack.
 
 Destroys and recreates the compose stack of this repository, volumes included. Standard library
 only; needs the docker CLI.
@@ -196,22 +197,6 @@ def fault(run, row, args):
         run.say(f"fault #{row['n']} done")
 
 
-def log_counts(run):
-    counts = {" ERROR ": 0, " WARN ": 0, "NOGROUP": 0}
-    logs = os.path.join(run.out, "logs")
-    # The slices only: a removed probe's whole log (logs/removed) repeats what they already hold.
-    for name in sorted(n for n in os.listdir(logs) if n.endswith(".txt.gz")):
-        with gzip.open(os.path.join(logs, name), "rt", errors="replace") as f:
-            for line in f:
-                for pattern in counts:
-                    if pattern in line:
-                        counts[pattern] += 1
-    with open(os.path.join(run.out, "log-counts.txt"), "w") as f:
-        for pattern, n in counts.items():
-            f.write(f"{pattern}: {n}\n")
-    run.say("log counts: " + ", ".join(f"{p.strip()} {n}" for p, n in counts.items()))
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seed", type=int, default=3)
@@ -303,7 +288,7 @@ def main():
              "--slice", "900", "--out", os.path.join(out, "timeline.csv"), output="timeline.txt")
     run.step("census final", "scripts/census", "--csv", os.path.join(out, "census.csv"))
     logs.save("999-end")
-    log_counts(run)
+    run.step("report", "scripts/long-run-report", out, "--snapshot")
     with open(os.path.join(out, "run.txt"), "a") as f:
         f.write(f"finished={iso(utc_now())}\n")
     run.say(f"finished; results in {out}")

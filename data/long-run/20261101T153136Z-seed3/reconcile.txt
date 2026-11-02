@@ -1,0 +1,25 @@
+Reconciliation at 2026-11-02T15:33:42.306497337Z: 29173 request(s) in the ledger, 195 stream(s) under 'sentinel:'
+
+State of each request (CRITERION §4)
+  ANSWERED            29061
+  DEAD_LETTERED           0
+  TIMED_OUT             103
+  IN_FLIGHT               0
+  LOST                    9
+
+Where the unanswered requests are in Redis (Q2)
+  LOST           DELIVERED          probe's directory row: no directory row        9
+  TIMED_OUT      PENDING            probe's directory row: RUNNING        1
+  TIMED_OUT      PENDING            probe's directory row: no directory row       70
+  TIMED_OUT      UNREAD             probe's directory row: RUNNING       32
+
+Which end stopped while an unanswered request was open, and where the probe's reply is
+  LOST           SENDER_STOPPED  reply UNREAD in the sender's stream        9
+  TIMED_OUT      NONE            no reply in Redis       70
+  TIMED_OUT      PROBE_STOPPED   no reply in Redis       33
+
+Outcomes of INFORM replies (O1)
+  APPLIED                   29041
+  PUBLISHED_NOT_APPLIED        20
+
+One row per request: data/long-run/20261101T153136Z-seed3/ledger.csv

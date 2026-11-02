@@ -1,0 +1,1 @@
+#66 2026-11-02T07:48:11.164Z SIGKILL alerter JVM agenor-sentinel_alerter_1: node 81616922-20fe-4c13-a2ac-631c4118d84f gone (exit -), node 2e921ae9-0e37-4158-8f5a-4d1274b1a19b running at 2026-11-02T07:48:17.664Z

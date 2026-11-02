@@ -1,0 +1,3 @@
+ ERROR : 100
+ WARN : 300
+NOGROUP: 0

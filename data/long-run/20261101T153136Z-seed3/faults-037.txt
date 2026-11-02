@@ -1,0 +1,1 @@
+#37 2026-11-02T00:33:20.374Z SIGKILL probe JVM agenor-sentinel_probe_4: node be7ddf94-db57-41fb-938c-8c9cf249a03c gone (exit -), node a056dd33-96e3-4913-a5d2-8f6550f0afb5 running at 2026-11-02T00:33:25.772Z

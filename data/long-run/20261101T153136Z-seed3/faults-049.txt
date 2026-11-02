@@ -1,0 +1,2 @@
+#49 2026-11-02T03:33:19.601Z SIGTERM probe, then start agenor-sentinel_probe_1: node 0e5852a2-3471-464e-b7ef-341f73ba19f1 gone (exit 143), node 3c8b3e67-5983-40e4-a801-1984503856ec running at 2026-11-02T03:33:25.820Z
+#49 2026-11-02T03:33:29.376Z SIGTERM probe, then start agenor-sentinel_probe_2: node ee339ade-fc4f-4ad3-8ede-c7622c2daa9f gone (exit 143), node 4e59a191-e486-4044-9c5c-dc680500f411 running at 2026-11-02T03:33:37.210Z

@@ -1,0 +1,98 @@
+slice_start,sent,answered,timed_out,dead_lettered,in_flight,lost,outcomes_applied,faults
+15:32:05,305,305,0,0,0,0,305,#1 SIGKILL coordinator JVM
+15:47:05,303,301,2,0,0,0,301,"#2 SIGTERM probe, then start; #2 SIGTERM probe, then start; #2 SIGTERM probe, then start"
+16:02:05,299,299,0,0,0,0,299,#3 scale up to 5; #3 scale up to 5
+16:17:05,307,304,3,0,0,0,304,#4 scale down to 2; #4 scale down to 2; #4 scale down to 2
+16:32:05,305,302,3,0,0,0,302,"#5 SIGTERM probe, then start; #5 SIGTERM probe, then start"
+16:47:05,303,303,0,0,0,0,303,#6 scale up to 5; #6 scale up to 5; #6 scale up to 5
+17:02:05,303,300,3,0,0,0,300,"#7 SIGTERM probe, then start; #7 SIGTERM probe, then start; #7 SIGTERM probe, then start; #7 SIGTERM probe, then start; #7 SIGTERM probe, then start"
+17:17:05,305,305,0,0,0,0,301,#8 SIGKILL alerter JVM
+17:32:05,302,300,2,0,0,0,300,#9 scale down to 2; #9 scale down to 2; #9 scale down to 2
+17:47:05,301,301,0,0,0,0,299,#10 SIGKILL alerter JVM
+18:02:05,303,299,4,0,0,0,299,#11 SIGKILL probe JVM
+18:17:05,305,302,3,0,0,0,302,"#12 SIGTERM probe, then start; #12 SIGTERM probe, then start"
+18:32:05,301,300,0,0,0,1,300,#13 SIGKILL coordinator JVM
+18:47:05,303,303,0,0,0,0,301,#14 SIGKILL alerter JVM
+19:02:05,305,304,1,0,0,0,304,"#15 SIGTERM probe, then start; #15 SIGTERM probe, then start"
+19:17:05,307,305,2,0,0,0,305,"#16 SIGTERM probe, then start; #16 SIGTERM probe, then start"
+19:32:05,305,305,0,0,0,0,305,#17 scale up to 5; #17 scale up to 5; #17 scale up to 5
+19:47:05,303,303,0,0,0,0,303,#18 scale down to 2; #18 scale down to 2; #18 scale down to 2
+20:02:05,305,305,0,0,0,0,305,#19 scale up to 5; #19 scale up to 5; #19 scale up to 5
+20:17:05,303,303,0,0,0,0,303,#20 scale down to 2; #20 scale down to 2; #20 scale down to 2
+20:32:05,305,305,0,0,0,0,305,"#21 SIGTERM probe, then start; #21 SIGTERM probe, then start"
+20:47:05,302,300,2,0,0,0,300,"#22 SIGTERM probe, then start; #22 SIGTERM probe, then start"
+21:02:05,305,305,0,0,0,0,305,#23 SIGKILL alerter JVM
+21:17:05,307,305,2,0,0,0,305,"#24 SIGTERM probe, then start; #24 SIGTERM probe, then start"
+21:32:05,303,301,0,0,0,2,301,#25 SIGKILL coordinator JVM
+21:47:05,301,300,1,0,0,0,300,"#26 SIGTERM probe, then start; #26 SIGTERM probe, then start"
+22:02:05,305,304,1,0,0,0,304,"#27 SIGTERM probe, then start; #27 SIGTERM probe, then start"
+22:17:05,304,304,0,0,0,0,304,#28 scale up to 5; #28 scale up to 5; #28 scale up to 5
+22:32:05,303,303,0,0,0,0,303,#29 scale down to 2; #29 scale down to 2; #29 scale down to 2
+22:47:05,303,303,0,0,0,0,303,#30 scale up to 5; #30 scale up to 5; #30 scale up to 5
+23:02:05,305,305,0,0,0,0,305,#31 scale down to 2; #31 scale down to 2; #31 scale down to 2
+23:17:05,305,305,0,0,0,0,305,#32 scale up to 5; #32 scale up to 5; #32 scale up to 5
+23:32:05,303,300,3,0,0,0,300,#33 SIGKILL probe JVM
+23:47:05,303,301,2,0,0,0,301,"#34 SIGTERM probe, then start; #34 SIGTERM probe, then start; #34 SIGTERM probe, then start; #34 SIGTERM probe, then start; #34 SIGTERM probe, then start"
+00:02:05,303,302,1,0,0,0,302,"#35 SIGTERM probe, then start; #35 SIGTERM probe, then start; #35 SIGTERM probe, then start; #35 SIGTERM probe, then start; #35 SIGTERM probe, then start"
+00:17:05,307,305,2,0,0,0,305,"#36 SIGTERM probe, then start; #36 SIGTERM probe, then start; #36 SIGTERM probe, then start; #36 SIGTERM probe, then start; #36 SIGTERM probe, then start"
+00:32:05,305,302,3,0,0,0,302,#37 SIGKILL probe JVM
+00:47:05,303,301,2,0,0,0,301,#38 SIGKILL probe JVM
+01:02:05,303,303,0,0,0,0,301,#39 SIGKILL alerter JVM
+01:17:05,305,305,0,0,0,0,305,#40 SIGKILL coordinator JVM
+01:32:05,303,303,0,0,0,0,303,#41 SIGKILL alerter JVM
+01:47:05,303,301,2,0,0,0,301,"#42 SIGTERM probe, then start; #42 SIGTERM probe, then start; #42 SIGTERM probe, then start; #42 SIGTERM probe, then start; #42 SIGTERM probe, then start"
+02:02:05,302,299,3,0,0,0,299,"#43 SIGTERM probe, then start; #43 SIGTERM probe, then start; #43 SIGTERM probe, then start; #43 SIGTERM probe, then start; #43 SIGTERM probe, then start"
+02:17:05,305,304,1,0,0,0,304,"#44 SIGTERM probe, then start; #44 SIGTERM probe, then start; #44 SIGTERM probe, then start; #44 SIGTERM probe, then start; #44 SIGTERM probe, then start"
+02:32:05,309,307,2,0,0,0,307,#45 SIGKILL probe JVM
+02:47:05,301,300,1,0,0,0,300,#46 scale down to 2; #46 scale down to 2; #46 scale down to 2
+03:02:05,305,301,4,0,0,0,301,#47 SIGKILL probe JVM
+03:17:05,303,301,2,0,0,0,301,"#48 SIGTERM probe, then start; #48 SIGTERM probe, then start"
+03:32:05,305,302,3,0,0,0,302,"#49 SIGTERM probe, then start; #49 SIGTERM probe, then start"
+03:47:05,303,303,0,0,0,0,303,#50 scale up to 5; #50 scale up to 5; #50 scale up to 5
+04:02:05,303,302,1,0,0,0,302,#51 scale down to 2; #51 scale down to 2; #51 scale down to 2
+04:17:05,303,300,3,0,0,0,300,"#52 SIGTERM probe, then start; #52 SIGTERM probe, then start"
+04:32:05,305,305,0,0,0,0,305,#53 scale up to 5; #53 scale up to 5; #53 scale up to 5
+04:47:05,301,301,0,0,0,0,301,#54 scale down to 2; #54 scale down to 2; #54 scale down to 2
+05:02:05,305,305,0,0,0,0,305,#55 scale up to 5; #55 scale up to 5; #55 scale up to 5
+05:17:05,303,300,3,0,0,0,300,"#56 SIGTERM probe, then start; #56 SIGTERM probe, then start; #56 SIGTERM probe, then start; #56 SIGTERM probe, then start; #56 SIGTERM probe, then start"
+05:32:05,307,305,2,0,0,0,305,#57 SIGKILL probe JVM
+05:47:05,303,301,2,0,0,0,301,"#58 SIGTERM probe, then start; #58 SIGTERM probe, then start; #58 SIGTERM probe, then start; #58 SIGTERM probe, then start; #58 SIGTERM probe, then start"
+06:02:05,303,301,2,0,0,0,301,"#59 SIGTERM probe, then start; #59 SIGTERM probe, then start; #59 SIGTERM probe, then start; #59 SIGTERM probe, then start; #59 SIGTERM probe, then start"
+06:17:05,302,302,0,0,0,0,300,#60 SIGKILL alerter JVM
+06:32:05,303,303,0,0,0,0,301,#61 SIGKILL alerter JVM
+06:47:05,305,303,2,0,0,0,303,"#62 SIGTERM probe, then start; #62 SIGTERM probe, then start; #62 SIGTERM probe, then start; #62 SIGTERM probe, then start; #62 SIGTERM probe, then start"
+07:02:05,305,304,1,0,0,0,304,"#63 SIGTERM probe, then start; #63 SIGTERM probe, then start; #63 SIGTERM probe, then start; #63 SIGTERM probe, then start; #63 SIGTERM probe, then start"
+07:17:05,303,301,2,0,0,0,301,#64 scale down to 2; #64 scale down to 2; #64 scale down to 2
+07:32:05,304,304,0,0,0,0,304,#65 SIGKILL coordinator JVM
+07:47:05,303,303,0,0,0,0,299,#66 SIGKILL alerter JVM
+08:02:05,303,303,0,0,0,0,301,#67 SIGKILL alerter JVM
+08:17:05,305,305,0,0,0,0,305,#68 SIGKILL coordinator JVM
+08:32:05,305,305,0,0,0,0,305,#69 scale up to 5; #69 scale up to 5; #69 scale up to 5
+08:47:05,303,303,0,0,0,0,303,"#70 SIGTERM probe, then start; #70 SIGTERM probe, then start; #70 SIGTERM probe, then start; #70 SIGTERM probe, then start; #70 SIGTERM probe, then start"
+09:02:05,299,298,1,0,0,0,298,#71 scale down to 2; #71 scale down to 2; #71 scale down to 2
+09:17:05,301,299,2,0,0,0,299,"#72 SIGTERM probe, then start; #72 SIGTERM probe, then start"
+09:32:05,305,302,3,0,0,0,302,"#73 SIGTERM probe, then start; #73 SIGTERM probe, then start"
+09:47:05,302,301,1,0,0,0,301,"#74 SIGTERM probe, then start; #74 SIGTERM probe, then start"
+10:02:05,305,302,3,0,0,0,302,#75 SIGKILL probe JVM
+10:17:05,303,303,0,0,0,0,303,#76 scale up to 5; #76 scale up to 5; #76 scale up to 5
+10:32:05,305,305,0,0,0,0,305,#77 scale down to 2; #77 scale down to 2; #77 scale down to 2
+10:47:05,305,305,0,0,0,0,305,#78 scale up to 5; #78 scale up to 5; #78 scale up to 5
+11:02:05,303,303,0,0,0,0,303,#79 SIGKILL coordinator JVM
+11:17:05,301,301,0,0,0,0,301,#80 scale down to 2; #80 scale down to 2; #80 scale down to 2
+11:32:05,304,299,5,0,0,0,299,#81 SIGKILL probe JVM
+11:47:05,303,302,1,0,0,0,302,"#82 SIGTERM probe, then start; #82 SIGTERM probe, then start"
+12:02:05,305,305,0,0,0,0,305,#83 scale up to 5; #83 scale up to 5; #83 scale up to 5
+12:17:05,303,303,0,0,0,0,303,#84 SIGKILL coordinator JVM
+12:32:05,307,304,3,0,0,0,304,"#85 SIGTERM probe, then start; #85 SIGTERM probe, then start; #85 SIGTERM probe, then start; #85 SIGTERM probe, then start; #85 SIGTERM probe, then start"
+12:47:05,305,305,0,0,0,0,305,#86 scale down to 2; #86 scale down to 2; #86 scale down to 2
+13:02:05,301,296,5,0,0,0,296,#87 SIGKILL probe JVM
+13:17:05,303,303,0,0,0,0,303,#88 SIGKILL alerter JVM
+13:32:05,305,303,0,0,0,2,303,#89 SIGKILL coordinator JVM
+13:47:05,303,303,0,0,0,0,303,#90 scale up to 5; #90 scale up to 5; #90 scale up to 5
+14:02:05,301,299,0,0,0,2,299,#91 SIGKILL coordinator JVM
+14:17:05,303,301,0,0,0,2,301,#92 SIGKILL coordinator JVM
+14:32:05,305,304,1,0,0,0,304,"#93 SIGTERM probe, then start; #93 SIGTERM probe, then start; #93 SIGTERM probe, then start; #93 SIGTERM probe, then start; #93 SIGTERM probe, then start"
+14:47:05,302,302,0,0,0,0,302,#94 scale down to 2; #94 scale down to 2; #94 scale down to 2
+15:02:05,305,305,0,0,0,0,305,#95 scale up to 5; #95 scale up to 5; #95 scale up to 5
+15:17:05,303,303,0,0,0,0,303,#96 scale down to 2; #96 scale down to 2; #96 scale down to 2
+15:32:05,20,20,0,0,0,0,20,

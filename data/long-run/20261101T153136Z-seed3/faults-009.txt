@@ -1,0 +1,3 @@
+#9 2026-11-01T17:33:23.716Z scale down to 2 agenor-sentinel_probe_3: node 3deccf34-23a1-4967-9d30-85de08cba0ee gone (exit 143), node None running at None
+#9 2026-11-01T17:33:23.717Z scale down to 2 agenor-sentinel_probe_4: node 047c44d4-bef8-465b-9807-e8f689db415a gone (exit 143), node None running at None
+#9 2026-11-01T17:33:23.718Z scale down to 2 agenor-sentinel_probe_5: node 19942d36-0056-4bc1-aa76-8b0596fb765f gone (exit 143), node None running at None

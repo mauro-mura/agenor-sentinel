@@ -1,0 +1,2 @@
+#3 2026-11-01T16:03:11.341Z scale up to 5 agenor-sentinel_probe_4: node None gone (exit -), node 5642d90c-ee85-450f-9974-9aed5c6b6c8f running at 2026-11-01T16:03:16.834Z
+#3 2026-11-01T16:03:11.341Z scale up to 5 agenor-sentinel_probe_5: node None gone (exit -), node 05833714-cf41-49c4-b393-af94b7cef5d6 running at 2026-11-01T16:03:19.550Z

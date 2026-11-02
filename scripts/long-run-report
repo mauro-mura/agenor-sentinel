@@ -1,0 +1,309 @@
+#!/usr/bin/env -S python3 -I
+"""What a finished long run comes to: the numbers FINDINGS.md quotes for Q5 and for the other
+questions, computed from the files of the run.
+
+    scripts/long-run-report data/long-run/<run> [--snapshot]
+
+--snapshot first copies into the run's directory what lives only in the stack, so it needs the
+stack still up (scripts/long-run calls it that way, as its last step; nothing here changes the
+stack):
+  alert.csv            the alerts raised;
+  directory.csv        the rows of agenor_agents;
+  keys.csv             each Redis key under the prefix: entries, bytes, consumer groups;
+  failed-outcomes.csv  each outcome on the topic that reports a failed check.
+
+Then it writes report.txt, and prints it. Each unanswered request is put down to the latest fault
+that started no more than 20 s after it was sent: 15 s for the coordinator's request timeout and 5 s
+for the fault to reach its victim. A failed check is put down to the latest fault started before it.
+
+Standard library only; --snapshot needs the docker CLI.
+"""
+
+import argparse
+import bisect
+import collections
+import csv
+import datetime
+import glob
+import gzip
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+
+ATTRIBUTION_SECONDS = 20
+LIVE_SECONDS = 60
+HEALTH_NEAR_FAULT_SECONDS = 120
+HEALTH_ROUND_SECONDS = 10
+
+KEYS_SCRIPT = """
+for k in $(valkey-cli --scan --pattern 'sentinel:*'); do
+  echo "$k $(valkey-cli xlen "$k") $(valkey-cli memory usage "$k") $(valkey-cli xinfo groups "$k" | grep -c '^name')"
+done
+"""
+
+
+def moment(text):
+    return datetime.datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+
+
+def compose_exec(service, *command):
+    return subprocess.run(["docker", "compose", "exec", "-T", service, *command], check=True,
+                          capture_output=True, text=True).stdout
+
+
+def psql_csv(query, path):
+    with open(path, "w") as f:
+        f.write(compose_exec("postgres", "psql", "-U", "sentinel", "-d", "sentinel", "--csv", "-c", query))
+
+
+def snapshot(out):
+    psql_csv("""SELECT a.id, a.target_id, t.name AS target, a.kind, a.request_id, a.raised_at, a.webhook_status
+                  FROM alert a JOIN target t ON t.id = a.target_id ORDER BY a.id""", os.path.join(out, "alert.csv"))
+    psql_csv("SELECT agent_id, node_id, status, last_seen FROM agenor_agents ORDER BY last_seen",
+             os.path.join(out, "directory.csv"))
+
+    with open(os.path.join(out, "keys.csv"), "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["key", "entries", "bytes", "groups"])
+        rows = [line.split() for line in compose_exec("valkey", "sh", "-c", KEYS_SCRIPT).splitlines() if line.strip()]
+        writer.writerows(sorted(rows))
+
+    raw = compose_exec("valkey", "valkey-cli", "--raw", "xrange", "sentinel:topic:outcomes", "-", "+")
+    with open(os.path.join(out, "failed-outcomes.csv"), "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["entry_id", "published_at", "request_id", "target_id", "probe_id", "http_status",
+                         "latency_millis", "error"])
+        entry = None
+        for line in raw.splitlines():
+            if re.fullmatch(r"\d{13}-\d+", line):
+                entry = line
+            elif line.startswith("{"):
+                message = json.loads(line)
+                outcome = message["content"]
+                if outcome["error"] is not None or not 0 < outcome["httpStatus"] < 500:
+                    writer.writerow([entry, message["timestamp"], outcome["requestId"], outcome["targetId"],
+                                     outcome["probeId"], outcome["httpStatus"], outcome["latencyMillis"],
+                                     outcome["error"]])
+
+
+def rows(out, name):
+    with open(os.path.join(out, name), newline="") as f:
+        return list(csv.DictReader(f))
+
+
+class Faults:
+    """Faults in the order they started, from progress.log and schedule.csv."""
+
+    def __init__(self, out):
+        plan = {int(r["n"]): r for r in rows(out, "schedule.csv")}
+        self.items = []
+        with open(os.path.join(out, "progress.log")) as f:
+            for line in f:
+                m = re.match(r"(\S+) fault #(\d+): regime", line)
+                if m:
+                    self.items.append((moment(m[1]), int(m[2])))
+        self.starts = [t for t, _ in self.items]
+        self.kind = {n: self._kind(plan[n]) for _, n in self.items}
+
+    @staticmethod
+    def _kind(row):
+        return {"1": "scale " + row["direction"], "2": "rolling upgrade", "3": "SIGKILL " + row["victim"]}[row["regime"]]
+
+    def before(self, when):
+        """The latest fault started by this moment: (number, seconds since it started), or None."""
+        i = bisect.bisect_right(self.starts, when) - 1
+        return None if i < 0 else (self.items[i][1], (when - self.starts[i]).total_seconds())
+
+    def numbers(self, kind):
+        return [n for _, n in self.items if self.kind[n] == kind]
+
+    def kinds(self):
+        return sorted(set(self.kind.values()))
+
+
+def unanswered(say, ledger, faults):
+    say("Unanswered requests and unapplied outcomes, by the fault they fall under")
+    by_kind = collections.defaultdict(collections.Counter)
+    by_fault = collections.defaultdict(collections.Counter)
+    for entry in ledger:
+        if entry["state"] != "ANSWERED":
+            what = f"{entry['state']} {entry['cause']}"
+        elif entry["outcome"] == "PUBLISHED_NOT_APPLIED":
+            what = entry["outcome"]
+        else:
+            continue
+        found = faults.before(moment(entry["created_at"]) + datetime.timedelta(seconds=ATTRIBUTION_SECONDS))
+        n = found[0] if found else 0
+        by_kind[faults.kind.get(n, "before any fault")][what] += 1
+        by_fault[n][what] += 1
+    for kind in sorted(by_kind):
+        for what, count in sorted(by_kind[kind].items()):
+            say(f"  {kind:22} {what:30} {count:6}")
+    for kind, what in (("SIGKILL probe", "TIMED_OUT PROBE_STOPPED"), ("SIGKILL coordinator", "LOST SENDER_STOPPED"),
+                       ("SIGKILL alerter", "PUBLISHED_NOT_APPLIED")):
+        each = {n: by_fault[n][what] for n in faults.numbers(kind)}
+        say(f"  each {kind}, {what}: {sum(1 for v in each.values() if v)} of {len(each)} faults, "
+            + " ".join(f"#{n}={v}" for n, v in each.items()))
+    orderly = sum(by_kind[k]["TIMED_OUT NONE"] for k in by_kind if not k.startswith("SIGKILL"))
+    lost = sum(by_kind[k][w] for k in by_kind for w in by_kind[k] if w.startswith("LOST") and not k.startswith("SIGKILL"))
+    say(f"  under orderly faults: timed out {orderly}, lost {lost}")
+
+
+def stops(say, out):
+    exits = [r for r in rows(out, "faults.csv") if r["exit_code"]]
+    seconds = [float(r["stop_seconds"]) for r in exits if r["stop_seconds"]]
+    codes = collections.Counter(r["exit_code"] for r in exits)
+    say(f"Orderly stops: {len(exits)}, exit codes {dict(codes)}, {min(seconds)} to {max(seconds)} s")
+    nodes = {r["replacement_node_id"] for r in rows(out, "faults.csv") if r["replacement_node_id"]}
+    say(f"New nodes named in faults.csv: {len(nodes)}")
+
+
+def failed_checks(say, out, ledger, faults):
+    failed = rows(out, "failed-outcomes.csv")
+    say(f"Checks that failed: {len(failed)}")
+    for error, count in collections.Counter(r["error"].split(":")[0] for r in failed).most_common():
+        say(f"  {error:30} {count:6}")
+    first_sent = {}
+    for entry in ledger:
+        first_sent.setdefault(entry["probe_id"], moment(entry["created_at"]))
+    sent = {e["request_id"]: e for e in ledger}
+    applied = sum(1 for r in failed if sent[r["request_id"]]["outcome"] == "APPLIED")
+    say(f"  applied by the alerter: {applied}")
+    ages = sorted((moment(sent[r["request_id"]]["created_at"]) - first_sent[r["probe_id"]]).total_seconds()
+                  for r in failed)
+    say(f"  from a probe that got its first request under 30 s before: {sum(a < 30 for a in ages)}; "
+        f"median {ages[len(ages) // 2]:.0f} s")
+    by_fault = collections.defaultdict(list)
+    for r in failed:
+        n, since = faults.before(moment(r["published_at"]))
+        by_fault[n].append(since)
+    for n in sorted(by_fault):
+        say(f"  #{n:<3} {faults.kind[n]:22} {len(by_fault[n]):3} failed, "
+            f"published {min(by_fault[n]):.0f} to {max(by_fault[n]):.0f} s after it started")
+    for kind in faults.kinds():
+        say(f"  {kind:22} faults with a failed check: "
+            f"{sum(faults.kind[n] == kind for n in by_fault)} of {len(faults.numbers(kind))}")
+    say("Alerts")
+    for alert in rows(out, "alert.csv"):
+        n, since = faults.before(moment(alert["raised_at"]))
+        say(f"  {alert['raised_at'][:19]} {alert['target']:8} {alert['kind']:5} webhook {alert['webhook_status']:4} "
+            f"{since:4.0f} s after #{n} {faults.kind[n]}")
+
+
+def growth(say, out):
+    census = rows(out, "census.csv")
+    first, last = census[0], census[-1]
+    hours = (moment(last["at"]) - moment(first["at"])).total_seconds() / 3600
+    say(f"Census: {len(census)} samples over {hours:.2f} h, first and last")
+    for column in ("node_streams", "topic_streams", "dlq_streams", "other_keys", "consumer_groups", "pending_entries",
+                   "agent_rows", "agent_rows_stale", "stream_entries", "used_memory"):
+        say(f"  {column:18} {first[column]:>10} {last[column]:>10}")
+    slope = (int(last["used_memory"]) - int(first["used_memory"])) / hours
+    say(f"  used_memory grows {slope / 1e6:.2f} MB an hour")
+    say(f"  stream_entries grows {(int(last['stream_entries']) - int(first['stream_entries'])) / hours:.0f} an hour")
+
+
+def memory(say, out):
+    directory = rows(out, "directory.csv")
+    latest = max(moment(r["last_seen"]) for r in directory)
+    live = {r["node_id"] for r in directory
+            if (latest - moment(r["last_seen"])).total_seconds() < LIVE_SECONDS}
+    say(f"Directory rows: {len(directory)}, of which seen in the last {LIVE_SECONDS} s: {len(live)}; the rest:")
+    for row in directory:
+        if row["node_id"] not in live:
+            say(f"  {row['agent_id']} {row['status']} last seen {row['last_seen'][:19]}")
+    totals = collections.defaultdict(lambda: [0, 0, 0, 0])
+    for key in rows(out, "keys.csv"):
+        name = key["key"]
+        kind = "topic" if ":topic:" in name else "live node" if name.split(":")[-1] in live else "dead node"
+        total = totals[kind]
+        total[0] += 1
+        total[1] += int(key["entries"])
+        total[2] += int(key["bytes"])
+        total[3] += int(key["groups"])
+    everything = sum(t[2] for t in totals.values())
+    say("Redis keys now: keys, entries, bytes, share of those bytes, consumer groups")
+    for kind in sorted(totals):
+        t = totals[kind]
+        say(f"  {kind:10} {t[0]:5} {t[1]:8} {t[2]:10} {100 * t[2] / everything:5.1f}% {t[3]:5}")
+
+
+def health(say, out, faults):
+    samples = rows(out, "health.csv")
+    bad = [s for s in samples if s["status"] != "UP"]
+    say(f"Health: {len(samples)} samples, {len(bad)} not UP, {dict(collections.Counter(s['status'] for s in bad))}")
+    # A sample's time is when its round began, and a round takes about 6 s: it can have seen a fault that
+    # started after that time.
+    far = []
+    for sample in bad:
+        found = faults.before(moment(sample["at"]) + datetime.timedelta(seconds=HEALTH_ROUND_SECONDS))
+        if found is None or found[1] > HEALTH_NEAR_FAULT_SECONDS:
+            far.append(sample)
+    say(f"  not UP more than {HEALTH_NEAR_FAULT_SECONDS} s after a fault started: {len(far)}")
+    for sample in far:
+        say(f"    {sample['at']} {sample['container']} {sample['status']}")
+
+
+def log_lines(out):
+    """Each log line once: a removed probe's whole log (logs/removed) repeats its earlier slices."""
+    seen = set()
+    paths = glob.glob(os.path.join(out, "logs", "*.txt.gz")) + glob.glob(os.path.join(out, "logs", "removed", "*.gz"))
+    for path in sorted(paths):
+        with gzip.open(path, "rt", errors="replace") as f:
+            for line in f:
+                seen.add(re.sub(r"^\S+ \| ", "", line))
+    return seen
+
+
+def logs(say, out):
+    lines = log_lines(out)
+    say(f"Log lines, each once: {len(lines)}, including logs/removed")
+    for name, pattern in (("ERROR", " ERROR "), ("WARN", " WARN "), ("NOGROUP", "NOGROUP"),
+                          ("handler failed, stream entry left pending", "ConsumerLoop"),
+                          ("  capability already shut down", "ConsumerLoop.*IllegalStateException"),
+                          ("  agent already out of the registry", "ConsumerLoop.*AgentNotFound"),
+                          ("no local handler", "No local handler"),
+                          ("request timed out, seen by the coordinator", "Commitment .* violated")):
+        say(f"  {name:45} {sum(1 for line in lines if re.search(pattern, line)):6}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("run", help="the run's directory")
+    parser.add_argument("--snapshot", action="store_true", help="first copy what lives only in the stack")
+    args = parser.parse_args()
+
+    args.run = os.path.abspath(args.run)
+    if args.snapshot:
+        os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        snapshot(args.run)
+
+    report = io.StringIO()
+
+    def say(text=""):
+        print(text)
+        report.write(text + "\n")
+
+    ledger = rows(args.run, "ledger.csv")
+    faults = Faults(args.run)
+    say(f"Requests: {len(ledger)}; " + ", ".join(
+        f"{state} {count}" for state, count in collections.Counter(e["state"] for e in ledger).most_common()))
+    say("Faults: " + ", ".join(f"{kind} {len(faults.numbers(kind))}" for kind in faults.kinds()))
+    for section in (lambda: unanswered(say, ledger, faults), lambda: stops(say, args.run),
+                    lambda: failed_checks(say, args.run, ledger, faults), lambda: growth(say, args.run),
+                    lambda: memory(say, args.run), lambda: health(say, args.run, faults),
+                    lambda: logs(say, args.run)):
+        say()
+        section()
+    with open(os.path.join(args.run, "report.txt"), "w") as f:
+        f.write(report.getvalue())
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except subprocess.CalledProcessError as e:
+        sys.exit(f"{e}\n{e.stderr}")
