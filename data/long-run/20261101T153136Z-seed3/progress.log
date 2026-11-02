@@ -1,0 +1,221 @@
+2026-11-01T15:31:36.886Z long run: 96 faults every 900 s, seed 3, results in data/long-run/20261101T153136Z-seed3
+2026-11-01T15:32:05.400Z stack up: 3 probes, 5 targets slowed to 3000 ms
+2026-11-01T15:33:14.150Z census 0
+2026-11-01T15:33:16.340Z fault #1: regime 3, SIGKILL coordinator
+2026-11-01T15:33:28.057Z fault #1 done
+2026-11-01T15:48:07.298Z fault #2: regime 2, rolling upgrade
+2026-11-01T15:48:38.527Z fault #2 done
+2026-11-01T16:03:07.597Z fault #3: regime 1, scale up
+2026-11-01T16:03:21.291Z fault #3 done
+2026-11-01T16:18:07.757Z fault #4: regime 1, scale down
+2026-11-01T16:18:17.547Z fault #4 done
+2026-11-01T16:33:14.221Z census 1
+2026-11-01T16:33:16.299Z fault #5: regime 2, rolling upgrade
+2026-11-01T16:33:38.347Z fault #5 done
+2026-11-01T16:48:07.534Z fault #6: regime 1, scale up
+2026-11-01T16:48:24.935Z fault #6 done
+2026-11-01T17:03:07.851Z fault #7: regime 2, rolling upgrade
+2026-11-01T17:04:01.911Z fault #7 done
+2026-11-01T17:18:07.809Z fault #8: regime 3, SIGKILL alerter
+2026-11-01T17:18:19.647Z fault #8 done
+2026-11-01T17:33:14.018Z census 2
+2026-11-01T17:33:16.350Z fault #9: regime 1, scale down
+2026-11-01T17:33:27.234Z fault #9 done
+2026-11-01T17:48:07.495Z fault #10: regime 3, SIGKILL alerter
+2026-11-01T17:48:19.233Z fault #10 done
+2026-11-01T18:03:07.441Z fault #11: regime 3, SIGKILL probe
+2026-11-01T18:03:18.376Z fault #11 done
+2026-11-01T18:18:07.481Z fault #12: regime 2, rolling upgrade
+2026-11-01T18:18:31.195Z fault #12 done
+2026-11-01T18:33:14.216Z census 3
+2026-11-01T18:33:16.187Z fault #13: regime 3, SIGKILL coordinator
+2026-11-01T18:33:28.054Z fault #13 done
+2026-11-01T18:48:07.521Z fault #14: regime 3, SIGKILL alerter
+2026-11-01T18:48:19.315Z fault #14 done
+2026-11-01T19:03:07.481Z fault #15: regime 2, rolling upgrade
+2026-11-01T19:03:30.358Z fault #15 done
+2026-11-01T19:18:07.444Z fault #16: regime 2, rolling upgrade
+2026-11-01T19:18:30.263Z fault #16 done
+2026-11-01T19:33:14.281Z census 4
+2026-11-01T19:33:16.317Z fault #17: regime 1, scale up
+2026-11-01T19:33:32.578Z fault #17 done
+2026-11-01T19:48:07.742Z fault #18: regime 1, scale down
+2026-11-01T19:48:16.170Z fault #18 done
+2026-11-01T20:03:07.395Z fault #19: regime 1, scale up
+2026-11-01T20:03:24.716Z fault #19 done
+2026-11-01T20:18:08.412Z fault #20: regime 1, scale down
+2026-11-01T20:18:17.819Z fault #20 done
+2026-11-01T20:33:15.015Z census 5
+2026-11-01T20:33:17.562Z fault #21: regime 2, rolling upgrade
+2026-11-01T20:33:40.156Z fault #21 done
+2026-11-01T20:48:07.422Z fault #22: regime 2, rolling upgrade
+2026-11-01T20:48:32.236Z fault #22 done
+2026-11-01T21:03:07.503Z fault #23: regime 3, SIGKILL alerter
+2026-11-01T21:03:19.151Z fault #23 done
+2026-11-01T21:18:07.462Z fault #24: regime 2, rolling upgrade
+2026-11-01T21:18:30.407Z fault #24 done
+2026-11-01T21:33:14.069Z census 6
+2026-11-01T21:33:16.076Z fault #25: regime 3, SIGKILL coordinator
+2026-11-01T21:33:27.904Z fault #25 done
+2026-11-01T21:48:07.494Z fault #26: regime 2, rolling upgrade
+2026-11-01T21:48:28.637Z fault #26 done
+2026-11-01T22:03:07.452Z fault #27: regime 2, rolling upgrade
+2026-11-01T22:03:31.100Z fault #27 done
+2026-11-01T22:18:07.530Z fault #28: regime 1, scale up
+2026-11-01T22:18:25.002Z fault #28 done
+2026-11-01T22:33:14.196Z census 7
+2026-11-01T22:33:16.592Z fault #29: regime 1, scale down
+2026-11-01T22:33:25.498Z fault #29 done
+2026-11-01T22:48:07.482Z fault #30: regime 1, scale up
+2026-11-01T22:48:25.223Z fault #30 done
+2026-11-01T23:03:07.774Z fault #31: regime 1, scale down
+2026-11-01T23:03:15.960Z fault #31 done
+2026-11-01T23:18:07.746Z fault #32: regime 1, scale up
+2026-11-01T23:18:25.759Z fault #32 done
+2026-11-01T23:33:14.096Z census 8
+2026-11-01T23:33:16.463Z fault #33: regime 3, SIGKILL probe
+2026-11-01T23:33:27.326Z fault #33 done
+2026-11-01T23:48:07.722Z fault #34: regime 2, rolling upgrade
+2026-11-01T23:49:00.898Z fault #34 done
+2026-11-02T00:03:07.827Z fault #35: regime 2, rolling upgrade
+2026-11-02T00:03:59.905Z fault #35 done
+2026-11-02T00:18:07.819Z fault #36: regime 2, rolling upgrade
+2026-11-02T00:19:02.071Z fault #36 done
+2026-11-02T00:33:14.248Z census 9
+2026-11-02T00:33:16.692Z fault #37: regime 3, SIGKILL probe
+2026-11-02T00:33:27.590Z fault #37 done
+2026-11-02T00:48:07.825Z fault #38: regime 3, SIGKILL probe
+2026-11-02T00:48:18.819Z fault #38 done
+2026-11-02T01:03:07.782Z fault #39: regime 3, SIGKILL alerter
+2026-11-02T01:03:19.503Z fault #39 done
+2026-11-02T01:18:07.755Z fault #40: regime 3, SIGKILL coordinator
+2026-11-02T01:18:19.458Z fault #40 done
+2026-11-02T01:33:14.158Z census 10
+2026-11-02T01:33:16.448Z fault #41: regime 3, SIGKILL alerter
+2026-11-02T01:33:27.090Z fault #41 done
+2026-11-02T01:48:07.905Z fault #42: regime 2, rolling upgrade
+2026-11-02T01:49:01.546Z fault #42 done
+2026-11-02T02:03:07.845Z fault #43: regime 2, rolling upgrade
+2026-11-02T02:04:03.603Z fault #43 done
+2026-11-02T02:18:07.753Z fault #44: regime 2, rolling upgrade
+2026-11-02T02:18:58.861Z fault #44 done
+2026-11-02T02:33:14.213Z census 11
+2026-11-02T02:33:16.708Z fault #45: regime 3, SIGKILL probe
+2026-11-02T02:33:27.755Z fault #45 done
+2026-11-02T02:48:07.810Z fault #46: regime 1, scale down
+2026-11-02T02:48:16.638Z fault #46 done
+2026-11-02T03:03:07.435Z fault #47: regime 3, SIGKILL probe
+2026-11-02T03:03:18.248Z fault #47 done
+2026-11-02T03:18:07.584Z fault #48: regime 2, rolling upgrade
+2026-11-02T03:18:30.689Z fault #48 done
+2026-11-02T03:33:14.063Z census 12
+2026-11-02T03:33:16.088Z fault #49: regime 2, rolling upgrade
+2026-11-02T03:33:38.970Z fault #49 done
+2026-11-02T03:48:07.414Z fault #50: regime 1, scale up
+2026-11-02T03:48:24.794Z fault #50 done
+2026-11-02T04:03:07.831Z fault #51: regime 1, scale down
+2026-11-02T04:03:16.627Z fault #51 done
+2026-11-02T04:18:07.515Z fault #52: regime 2, rolling upgrade
+2026-11-02T04:18:30.613Z fault #52 done
+2026-11-02T04:33:14.049Z census 13
+2026-11-02T04:33:16.172Z fault #53: regime 1, scale up
+2026-11-02T04:33:33.613Z fault #53 done
+2026-11-02T04:48:07.864Z fault #54: regime 1, scale down
+2026-11-02T04:48:16.187Z fault #54 done
+2026-11-02T05:03:07.686Z fault #55: regime 1, scale up
+2026-11-02T05:03:25.081Z fault #55 done
+2026-11-02T05:18:07.862Z fault #56: regime 2, rolling upgrade
+2026-11-02T05:19:01.532Z fault #56 done
+2026-11-02T05:33:14.063Z census 14
+2026-11-02T05:33:16.398Z fault #57: regime 3, SIGKILL probe
+2026-11-02T05:33:27.157Z fault #57 done
+2026-11-02T05:48:07.787Z fault #58: regime 2, rolling upgrade
+2026-11-02T05:49:01.110Z fault #58 done
+2026-11-02T06:03:08.669Z fault #59: regime 2, rolling upgrade
+2026-11-02T06:04:03.565Z fault #59 done
+2026-11-02T06:18:07.860Z fault #60: regime 3, SIGKILL alerter
+2026-11-02T06:18:19.743Z fault #60 done
+2026-11-02T06:33:14.194Z census 15
+2026-11-02T06:33:16.605Z fault #61: regime 3, SIGKILL alerter
+2026-11-02T06:33:28.349Z fault #61 done
+2026-11-02T06:48:07.934Z fault #62: regime 2, rolling upgrade
+2026-11-02T06:49:01.551Z fault #62 done
+2026-11-02T07:03:07.834Z fault #63: regime 2, rolling upgrade
+2026-11-02T07:04:01.269Z fault #63 done
+2026-11-02T07:18:07.766Z fault #64: regime 1, scale down
+2026-11-02T07:18:18.588Z fault #64 done
+2026-11-02T07:33:14.157Z census 16
+2026-11-02T07:33:16.224Z fault #65: regime 3, SIGKILL coordinator
+2026-11-02T07:33:28.090Z fault #65 done
+2026-11-02T07:48:07.552Z fault #66: regime 3, SIGKILL alerter
+2026-11-02T07:48:19.445Z fault #66 done
+2026-11-02T08:03:07.517Z fault #67: regime 3, SIGKILL alerter
+2026-11-02T08:03:19.482Z fault #67 done
+2026-11-02T08:18:07.489Z fault #68: regime 3, SIGKILL coordinator
+2026-11-02T08:18:19.356Z fault #68 done
+2026-11-02T08:33:14.059Z census 17
+2026-11-02T08:33:16.109Z fault #69: regime 1, scale up
+2026-11-02T08:33:32.721Z fault #69 done
+2026-11-02T08:48:07.834Z fault #70: regime 2, rolling upgrade
+2026-11-02T08:48:58.237Z fault #70 done
+2026-11-02T09:03:07.779Z fault #71: regime 1, scale down
+2026-11-02T09:03:16.518Z fault #71 done
+2026-11-02T09:18:07.477Z fault #72: regime 2, rolling upgrade
+2026-11-02T09:18:33.703Z fault #72 done
+2026-11-02T09:33:14.534Z census 18
+2026-11-02T09:33:16.677Z fault #73: regime 2, rolling upgrade
+2026-11-02T09:33:39.559Z fault #73 done
+2026-11-02T09:48:07.618Z fault #74: regime 2, rolling upgrade
+2026-11-02T09:48:29.571Z fault #74 done
+2026-11-02T10:03:07.535Z fault #75: regime 3, SIGKILL probe
+2026-11-02T10:03:18.594Z fault #75 done
+2026-11-02T10:18:07.567Z fault #76: regime 1, scale up
+2026-11-02T10:18:25.200Z fault #76 done
+2026-11-02T10:33:14.411Z census 19
+2026-11-02T10:33:16.855Z fault #77: regime 1, scale down
+2026-11-02T10:33:25.305Z fault #77 done
+2026-11-02T10:48:07.499Z fault #78: regime 1, scale up
+2026-11-02T10:48:25.361Z fault #78 done
+2026-11-02T11:03:07.753Z fault #79: regime 3, SIGKILL coordinator
+2026-11-02T11:03:18.500Z fault #79 done
+2026-11-02T11:18:07.796Z fault #80: regime 1, scale down
+2026-11-02T11:18:16.037Z fault #80 done
+2026-11-02T11:33:14.091Z census 20
+2026-11-02T11:33:16.278Z fault #81: regime 3, SIGKILL probe
+2026-11-02T11:33:27.306Z fault #81 done
+2026-11-02T11:48:07.478Z fault #82: regime 2, rolling upgrade
+2026-11-02T11:48:29.350Z fault #82 done
+2026-11-02T12:03:07.493Z fault #83: regime 1, scale up
+2026-11-02T12:03:24.730Z fault #83 done
+2026-11-02T12:18:07.889Z fault #84: regime 3, SIGKILL coordinator
+2026-11-02T12:18:19.650Z fault #84 done
+2026-11-02T12:33:14.051Z census 21
+2026-11-02T12:33:16.556Z fault #85: regime 2, rolling upgrade
+2026-11-02T12:34:10.352Z fault #85 done
+2026-11-02T12:48:07.826Z fault #86: regime 1, scale down
+2026-11-02T12:48:16.280Z fault #86 done
+2026-11-02T13:03:07.252Z fault #87: regime 3, SIGKILL probe
+2026-11-02T13:03:18.165Z fault #87 done
+2026-11-02T13:18:07.566Z fault #88: regime 3, SIGKILL alerter
+2026-11-02T13:18:19.388Z fault #88 done
+2026-11-02T13:33:14.369Z census 22
+2026-11-02T13:33:16.452Z fault #89: regime 3, SIGKILL coordinator
+2026-11-02T13:33:28.268Z fault #89 done
+2026-11-02T13:48:07.476Z fault #90: regime 1, scale up
+2026-11-02T13:48:25.065Z fault #90 done
+2026-11-02T14:03:08.011Z fault #91: regime 3, SIGKILL coordinator
+2026-11-02T14:03:19.797Z fault #91 done
+2026-11-02T14:18:07.750Z fault #92: regime 3, SIGKILL coordinator
+2026-11-02T14:18:19.474Z fault #92 done
+2026-11-02T14:33:14.379Z census 23
+2026-11-02T14:33:16.750Z fault #93: regime 2, rolling upgrade
+2026-11-02T14:34:08.890Z fault #93 done
+2026-11-02T14:48:07.888Z fault #94: regime 1, scale down
+2026-11-02T14:48:16.419Z fault #94 done
+2026-11-02T15:03:07.524Z fault #95: regime 1, scale up
+2026-11-02T15:03:25.125Z fault #95 done
+2026-11-02T15:18:07.826Z fault #96: regime 1, scale down
+2026-11-02T15:18:16.359Z fault #96 done
+2026-11-02T15:33:07.123Z dispatching stopped
+2026-11-02T15:33:58.612Z log counts: ERROR 100, WARN 300, NOGROUP 0
+2026-11-02T15:33:58.612Z finished; results in data/long-run/20261101T153136Z-seed3

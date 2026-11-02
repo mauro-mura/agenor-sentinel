@@ -146,6 +146,14 @@ Documentation gaps met on the way in are recorded first in the entry diary
   delivered once and is still pending in the stopped node's stream, and none is in a `:dlq`. Those
   runs kept no probe log, so the cause is shown by the reproduction above, and the runs agree with
   it.
+- **How often, in the 24-hour run (Q5):** 158 orderly stops, 70 requests timed out, none lost. This
+  run kept the probes' logs, and they show a second form. In 58 of the 70 log entries the handler ran
+  and its reply was refused, as above. In the other 12 the handler never ran: the request was read
+  after the agent had left the node's registry, and the log says `RedisMessageDispatcher: No local
+  handler for receiverId=...`, then `ConsumerLoop: Handler failed for entry ... (attempt 1/3):
+  dev.agenor.core.exceptions.AgentNotFoundException`. The consumer loop was still reading a mailbox
+  whose only agent had gone. The two counts add up to the 70 requests; the log lines were not matched
+  to the requests one by one. All 70 requests are pending in a stopped node's stream.
 - **What the pages say:** nothing about work in flight during an orderly stop. `agent-development`
   says `onStop()` runs before behaviours are stopped and the agent is unregistered, and that
   `DialogueCapability` registers itself on the agent's start and stop hooks. `dialog-protocol`
@@ -364,6 +372,40 @@ Documentation gaps met on the way in are recorded first in the entry diary
   restart can miss its DOWN alert, or its UP. CRITERION §2 names a missing alert as the error a
   user would see. Whether this happens under regime 3, and how often, is for the ledger to show;
   the ledger will need a column for "answered, outcome published, never applied".
+- **Measured in the 24-hour run (Q5):** 20 outcomes published and never applied, at 8 of the 11
+  alerter kills, 2 to 4 at each. All 20 were successful checks, so no alert changed. Every target
+  stayed up in that run, so it cannot say what a missed failure would have cost.
+
+## O2. False alerts during orderly faults, with every target up
+
+- **Kind:** observation. The cause is not established, and nothing here attributes it to Agenor.
+- **Version:** 0.39.0, podman 4.9.3 with docker-compose 1.29.2, in the 24-hour run (Q5).
+- **What happened:** no target was switched off during the run, and there were still 3 DOWN alerts,
+  each followed by its UP 12 to 17 s later (`alert.csv`). CRITERION §2 names a duplicate or missing
+  alert as the error a user would see; a false alert is one too, though it does not name it.
+
+  | Raised (UTC) | Target | Alert | Webhook | During |
+  |---|---|---|---:|---|
+  | 2026-11-02 07:19:01 | bravo | DOWN | 204 | fault #64, scale down |
+  | 2026-11-02 07:19:13 | bravo | UP | 204 | |
+  | 2026-11-02 11:48:45 | alpha | DOWN | **0** | fault #82, rolling upgrade |
+  | 2026-11-02 11:49:02 | alpha | UP | 204 | |
+  | 2026-11-02 12:34:38 | delta | DOWN | 204 | fault #85, rolling upgrade |
+  | 2026-11-02 12:34:52 | delta | UP | 204 | |
+
+- **Where they come from:** 44 checks failed out of 29,061 (`failed-outcomes.csv`), every one because
+  the probe's own HTTP client could not connect to the `fixtures` container: 22 `ConnectException`,
+  21 `HttpConnectTimeoutException`, 1 `HttpTimeoutException`. The alerter applied all 44, and did what
+  it was told: a threshold of failures in a row means DOWN. The 0 on the alpha alert is the alerter
+  failing to reach the same container with its webhook, so this is not only the probes.
+- **When:** all 44 fall in 10 of the 64 faults that start or stop containers in order (7 of 32 rolling
+  upgrades, 2 of 16 scale downs, 1 of 16 scale ups), 10 to 85 s after the fault started. None falls in
+  the 32 kills, where the orchestrator replaces one container. `fixtures` never restarted. Only 10 of
+  the 44 came from a probe within 30 s of its first request, so it is not only new containers.
+- **What it suggests, and does not show:** connections between containers failing while containers
+  come and go points at the network of the orchestrator. That is a suspicion. Agenor carries no part
+  of this path, but this run cannot separate podman from anything else: it needs the same run on real
+  Docker.
 
 ## C1. The ledger cannot hold Agenor's message id before the send
 
@@ -831,3 +873,146 @@ is not the 24-hour one.
 
 - The health of the processes was sampled every 21 s on average: 15 s is the pause between samples.
 - It ran on the same orchestrator as Q2-Q7, so it says nothing about real Docker.
+
+## Q5. What grows: everything a restart leaves behind, and nothing removes it
+
+- **Kind:** outcome of a question (CRITERION §4, Q5). By Q5's rule it finds defects: F8.
+- **Version and configuration:** as in Q4: 0.39.0 from Maven Central, the starter in all three roles,
+  JDBC directory and presence, heartbeat every 15 s, the coordinator's liveness filter on, Valkey at
+  a fixed address (F4). Podman 4.9.3 behind the Docker CLI, with docker-compose 1.29.2.
+- **Run:** `scripts/long-run` with its defaults, on commit `e07d289`, from 2026-11-01 15:31:36 to
+  2026-11-02 15:33:58 UTC. 96 faults at seed 3, one every 15 minutes, as `schedule.csv` lists: 16 scale
+  ups, 16 scale downs, 32 rolling upgrades, and 32 kills (10 of a probe, 11 of the coordinator, 11 of
+  the alerter). Every fault finished, and there is no `errors.log`. Data:
+  `data/long-run/20261101T153136Z-seed3/`; the numbers below are in its `report.txt`, computed by
+  `scripts/long-run-report`.
+
+### The series
+
+25 censuses, one an hour (`census.csv`):
+
+| | Start | After 24 h |
+|---|---:|---:|
+| Node streams | 5 | 194 |
+| Topic streams | 1 | 1 |
+| `:dlq` streams | 0 | 0 |
+| Consumer groups | 6 | 206 |
+| Pending entries | 3 | 71 |
+| Rows in `agenor_agents` | 5 | 14 |
+| of which stale | 0 | 10 |
+| Stream entries | 71 | 87,304 |
+| Valkey `used_memory` | 1.37 MB | 65.6 MB |
+
+- **Node streams:** 189 new nodes in `faults.csv`, 189 new streams. None went away. 190 of the 194
+  belong to nodes that will never return.
+- **Consumer groups:** one for each node stream, and 12 on the topic: the alerter's first, and one for
+  each of its 11 kills. One subscriber is alive.
+- **Directory rows:** 4 live, and one for each of the 10 probes killed. An orderly stop deletes its row
+  (Q4); a kill does not. Every one of the 10 still says `RUNNING`, the oldest last seen 21 hours before
+  the end of the run.
+- **Pending entries:** at the end, 71: the 70 requests of F3 and 1 that a killed probe was working on.
+  None will be reclaimed.
+- **Memory:** 2.68 MB an hour, nearly in a straight line, at 3,633 stream entries an hour.
+
+Where the bytes are at the end (`keys.csv`, by `MEMORY USAGE`):
+
+| | Keys | Entries | Bytes | Share |
+|---|---:|---:|---:|---:|
+| Streams of dead nodes | 190 | 55,882 | 45,046,252 | 70.1% |
+| The topic | 1 | 29,061 | 17,237,320 | 26.8% |
+| Streams of live nodes | 4 | 2,361 | 1,969,856 | 3.1% |
+
+### What decides it
+
+Q5's rule: what grows with the number of restarts, without bound and without a cleanup described on a
+page, is a defect, of the page if the cleanup exists, of the framework if it does not. Growth that
+stops at `maxStreamLength` is not.
+
+| What | Grows with | Bound | Cleanup on a page | Verdict |
+|---|---|---|---|---|
+| The topic's entries | time | `max-stream-length`, 100,000 by default; at this rate about 3.4 days | not needed | no defect |
+| Entries of one node's stream | time | the same limit | not needed | no defect |
+| Consumer groups on a topic | subscriber restarts | none | none | F8: framework |
+| Directory rows of killed agents | kills of a probe | none | none | F8: framework |
+| Node streams, their groups and their memory | every new node | none | `DEL`, by hand | F8: two readings |
+
+The bound on the topic was not reached in this run; it comes from the page.
+
+### Against CRITERION §7
+
+- **"Node streams grow by one per restart, without bound": confirmed.** 189 of 189, and 24 hours show
+  nothing that would stop them.
+- **"Topic groups grow by one per alerter restart": confirmed.** 11 of 11.
+- **"In 24 hours, at one failure every 15 minutes, that is about 96 orphaned keys": refuted.** There
+  are 190. A rolling upgrade or a scale up makes several new nodes, not one: 96 faults made 189.
+- **"Not a memory problem: a cleanup problem that no page describes for an ephemeral id": half
+  confirmed.** 65.6 MB in a day on this small load is not a problem yet, but it does not level off,
+  and 70% of it is the mail of nodes that are gone. As to the page, the `DEL` line exists and does not
+  mention an ephemeral id: see F8.
+
+### What the run says about the other questions
+
+Each unanswered request is put down to the latest fault that started no more than 20 s after it was
+sent.
+
+| State | Requests | Under |
+|---|---:|---|
+| answered | 29,061 | |
+| timed out | 60 | rolling upgrades |
+| timed out | 10 | scale downs |
+| timed out | 33 | kills of a probe, at 10 of 10 |
+| dead-lettered | 0 | |
+| in flight | 0 | |
+| lost | 9 | kills of the coordinator, at 5 of 11 |
+
+- **Q2 holds:** a probe killed loses nothing, and its work times out. Of the 33 requests, 32 are unread
+  in the dead node's stream and 1 is pending.
+- **Q4 holds, at a larger scale:** 158 orderly stops, all with exit code 143, 0 lost. F3 cost 70
+  requests, and it has a second form, recorded there.
+- **F7 holds:** all 9 lost requests were answered by the probe, and the replies are unread in the
+  stream of the coordinator that died.
+- **O1 measured:** 20 outcomes at 8 of 11 alerter kills, recorded there.
+- **New:** false alerts during orderly faults: O2.
+- **Health:** 45 of 22,363 samples are not `UP`, all within 120 s of a fault starting. One of them is a
+  503 from a probe during a rolling upgrade; the others could not reach a container.
+
+### Limits of this run
+
+- **Every target stayed up.** A missing alert cannot be seen in it, only a false one (O2).
+- It ran on podman only, so it says nothing about real Docker, and O2 may belong to podman.
+- The load is small and fixed: about 1,214 requests an hour. The memory figures are this load's.
+- `alert.csv`, `directory.csv`, `keys.csv` and `failed-outcomes.csv` were copied almost 4 hours after
+  the end, with the dispatching stopped and the stack still up, because `scripts/long-run-report` was
+  written after the run. Just before the copy, Valkey's memory read within 32 bytes of the last census.
+- `log-counts.txt` in this run's data is wrong, and is left as written: it says 100 `ERROR` and 300
+  `WARN`, and the logs hold 116 and 312. It skipped `logs/removed`, on the mistaken belief that those
+  logs only repeat the slices, when each also holds a removed probe's last stretch. `report.txt` has the
+  right counts, and `scripts/long-run` now leaves the counting to the report.
+
+## F8. What a restart leaves behind is never removed
+
+- **Kind:** behavioural defect by CRITERION §5 point 5 (growth without bound and without cleanup) for
+  consumer groups and directory rows. For node streams, two readings, below. Found by Q5.
+- **Version:** 0.39.0, Redis transport, JDBC directory and presence, the starter in all three roles.
+- **Consumer groups on a topic:** "every `subscribeTopic` creates a new group with a unique
+  subscription id" is documented. The 24-hour run ended with 12 groups on `outcomes` for one living
+  subscriber. `adapters/redis` never mentions removing a group.
+- **Directory rows of killed agents:** a probe gets a new agent id on each start, so a killed probe's
+  row is never overwritten. The run ended with 10 such rows, all `RUNNING`.
+  `adapters/jdbc-directory` says that `getStatus` answers `UNKNOWN` past the staleness window, that
+  "that check happens at read time", and describes nothing that removes a row.
+- **Node streams, reading 1, by the letter: a documentation defect.** `adapters/redis` does describe a
+  cleanup: "A node that never comes back keeps a stream. Nothing expires it; trimming bounds its size,
+  not its existence. `DEL agenor:node:<nodeId>` when you retire an ID for good." So the cleanup exists,
+  and what is missing is the page saying that under the starter every restart retires an id, and how an
+  operator tells which ones are retired. The line reads as a rare, deliberate act.
+- **Node streams, reading 2, in substance: a behavioural defect.** At 189 retired ids a day, a line
+  for an operator's rare act is not a cleanup. The starter generates the ids, offers no property to pin
+  one, and leaves no record of which are finished: a stream's owner is known to be gone only by
+  comparing it with the directory, which itself keeps killed agents as `RUNNING`. Which reading prevails
+  is not decided here.
+- **In memory (CRITERION §5, point 7):** not tried. A process that dies takes an in-memory transport
+  and directory with it, so the case should not exist.
+- **Missing capabilities, phrased as CRITERION §5 point 3 asks:** a node that will not return stops
+  holding space on the broker; a subscriber that is gone stops holding a group; an agent that died
+  without goodbye does not stay in the directory for ever.

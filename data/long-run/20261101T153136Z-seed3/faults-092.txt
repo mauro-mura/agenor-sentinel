@@ -1,0 +1,1 @@
+#92 2026-11-02T14:18:11.182Z SIGKILL coordinator JVM agenor-sentinel_coordinator_1: node d0d6da48-65f8-426c-b2c2-381995d6f65f gone (exit -), node d364f2cd-cb51-46df-8f46-740a10df3289 running at 2026-11-02T14:18:17.683Z

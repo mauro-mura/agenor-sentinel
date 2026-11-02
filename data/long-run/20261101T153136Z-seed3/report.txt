@@ -1,0 +1,89 @@
+Requests: 29173; ANSWERED 29061, TIMED_OUT 103, LOST 9
+Faults: SIGKILL alerter 11, SIGKILL coordinator 11, SIGKILL probe 10, rolling upgrade 32, scale down 16, scale up 16
+
+Unanswered requests and unapplied outcomes, by the fault they fall under
+  SIGKILL alerter        PUBLISHED_NOT_APPLIED              20
+  SIGKILL coordinator    LOST SENDER_STOPPED                 9
+  SIGKILL probe          TIMED_OUT PROBE_STOPPED            33
+  rolling upgrade        TIMED_OUT NONE                     60
+  scale down             TIMED_OUT NONE                     10
+  each SIGKILL probe, TIMED_OUT PROBE_STOPPED: 10 of 10 faults, #11=4 #33=3 #37=3 #38=2 #45=2 #47=4 #57=2 #75=3 #81=5 #87=5
+  each SIGKILL coordinator, LOST SENDER_STOPPED: 5 of 11 faults, #1=0 #13=1 #25=2 #40=0 #65=0 #68=0 #79=0 #84=0 #89=2 #91=2 #92=2
+  each SIGKILL alerter, PUBLISHED_NOT_APPLIED: 8 of 11 faults, #8=4 #10=2 #14=2 #23=0 #39=2 #41=0 #60=2 #61=2 #66=4 #67=2 #88=0
+  under orderly faults: timed out 70, lost 0
+
+Orderly stops: 158, exit codes {'143': 158}, 0.5 to 4.9 s
+New nodes named in faults.csv: 189
+
+Checks that failed: 44
+  ConnectException                   22
+  HttpConnectTimeoutException        21
+  HttpTimeoutException                1
+  applied by the alerter: 44
+  from a probe that got its first request under 30 s before: 10; median 866 s
+  #17  scale up                 3 failed, published 14 to 30 s after it started
+  #18  scale down               6 failed, published 17 to 35 s after it started
+  #21  rolling upgrade          4 failed, published 11 to 11 s after it started
+  #22  rolling upgrade          2 failed, published 51 to 52 s after it started
+  #43  rolling upgrade          1 failed, published 66 to 66 s after it started
+  #44  rolling upgrade          4 failed, published 10 to 11 s after it started
+  #63  rolling upgrade          5 failed, published 34 to 66 s after it started
+  #64  scale down               5 failed, published 33 to 54 s after it started
+  #82  rolling upgrade          7 failed, published 20 to 38 s after it started
+  #85  rolling upgrade          7 failed, published 66 to 85 s after it started
+  SIGKILL alerter        faults with a failed check: 0 of 11
+  SIGKILL coordinator    faults with a failed check: 0 of 11
+  SIGKILL probe          faults with a failed check: 0 of 10
+  rolling upgrade        faults with a failed check: 7 of 32
+  scale down             faults with a failed check: 2 of 16
+  scale up               faults with a failed check: 1 of 16
+Alerts
+  2026-11-02 07:19:01 bravo    DOWN  webhook 204    54 s after #64 scale down
+  2026-11-02 07:19:13 bravo    UP    webhook 204    66 s after #64 scale down
+  2026-11-02 11:48:45 alpha    DOWN  webhook 0      38 s after #82 rolling upgrade
+  2026-11-02 11:49:02 alpha    UP    webhook 204    55 s after #82 rolling upgrade
+  2026-11-02 12:34:38 delta    DOWN  webhook 204    82 s after #85 rolling upgrade
+  2026-11-02 12:34:52 delta    UP    webhook 204    96 s after #85 rolling upgrade
+
+Census: 25 samples over 24.01 h, first and last
+  node_streams                5        194
+  topic_streams               1          1
+  dlq_streams                 0          0
+  other_keys                  0          0
+  consumer_groups             6        206
+  pending_entries             3         71
+  agent_rows                  5         14
+  agent_rows_stale            0         10
+  stream_entries             71      87304
+  used_memory           1372592   65611952
+  used_memory grows 2.68 MB an hour
+  stream_entries grows 3633 an hour
+
+Directory rows: 14, of which seen in the last 60 s: 4; the rest:
+  1f2b6d60-3157-4758-9781-b1810f3cbdb8 RUNNING last seen 2026-11-01 18:03:03
+  bfa3e707-9906-477a-a241-9e15cd0d18ca RUNNING last seen 2026-11-01 23:33:17
+  13ce8a6d-4c8b-4fef-8c07-9bca8f1ab8fd RUNNING last seen 2026-11-02 00:33:06
+  fe4132b7-ab7b-4bcf-af83-be67d2805b38 RUNNING last seen 2026-11-02 00:48:02
+  1579a358-2655-40fb-8791-f2a6860a593b RUNNING last seen 2026-11-02 02:33:12
+  bbea61b7-1cd8-4f70-b2a3-d848d2d3d1c2 RUNNING last seen 2026-11-02 03:03:01
+  d8cb136c-2978-4d20-bd9f-61fb8c0a782b RUNNING last seen 2026-11-02 05:33:17
+  0b520400-95a8-44db-844c-3e350b4dc3bf RUNNING last seen 2026-11-02 10:02:57
+  217ad7b4-7ed7-419e-87ac-05dc0021da89 RUNNING last seen 2026-11-02 11:33:17
+  89ae645f-dc40-438b-83a5-adacd0fc4f9f RUNNING last seen 2026-11-02 13:03:08
+Redis keys now: keys, entries, bytes, share of those bytes, consumer groups
+  dead node    190    55882   45046252  70.1%   190
+  live node      4     2361    1969856   3.1%     4
+  topic          1    29061   17237320  26.8%    12
+
+Health: 22363 samples, 45 not UP, {'UNREACHABLE': 44, 'DOWN': 1}
+  not UP more than 120 s after a fault started: 0
+
+Log lines, each once: 13986, including logs/removed
+  ERROR                                            116
+  WARN                                             312
+  NOGROUP                                            0
+  handler failed, stream entry left pending         70
+    capability already shut down                    58
+    agent already out of the registry               12
+  no local handler                                  12
+  request timed out, seen by the coordinator       103
