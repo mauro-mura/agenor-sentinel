@@ -876,7 +876,7 @@ is not the 24-hour one.
 
 ## Q5. What grows: everything a restart leaves behind, and nothing removes it
 
-- **Kind:** outcome of a question (CRITERION §4, Q5). By Q5's rule it finds defects: F8.
+- **Kind:** outcome of a question (CRITERION §4, Q5). It found F8.
 - **Version and configuration:** as in Q4: 0.39.0 from Maven Central, the starter in all three roles,
   JDBC directory and presence, heartbeat every 15 s, the coordinator's liveness filter on, Valkey at
   a fixed address (F4). Podman 4.9.3 behind the Docker CLI, with docker-compose 1.29.2.
@@ -932,8 +932,8 @@ stops at `maxStreamLength` is not.
 |---|---|---|---|---|
 | The topic's entries | time | `max-stream-length`, 100,000 by default; at this rate about 3.4 days | not needed | no defect |
 | Entries of one node's stream | time | the same limit | not needed | no defect |
-| Consumer groups on a topic | subscriber restarts | none | none | F8: framework |
-| Directory rows of killed agents | kills of a probe | none | none | F8: framework |
+| Consumer groups on a topic | kills of a subscriber | none | `unsubscribe()` in `onStop()`, which a kill never reaches | F8: two readings |
+| Directory rows of killed agents | kills of a probe | none | none; `unregister` is listed, for no such case | F8: two readings |
 | Node streams, their groups and their memory | every new node | none | `DEL`, by hand | F8: two readings |
 
 The bound on the topic was not reached in this run; it comes from the page.
@@ -949,6 +949,9 @@ The bound on the topic was not reached in this run; it comes from the page.
   confirmed.** 65.6 MB in a day on this small load is not a problem yet, but it does not level off,
   and 70% of it is the mail of nodes that are gone. As to the page, the `DEL` line exists and does not
   mention an ephemeral id: see F8.
+
+The expectation about topic groups was measured only for kills: every alerter stop in this run was
+one. What an orderly stop of the alerter does to its group was not measured by any run here.
 
 ### What the run says about the other questions
 
@@ -991,28 +994,136 @@ sent.
 
 ## F8. What a restart leaves behind is never removed
 
-- **Kind:** behavioural defect by CRITERION §5 point 5 (growth without bound and without cleanup) for
-  consumer groups and directory rows. For node streams, two readings, below. Found by Q5.
+- **Kind:** two readings, as in F3; which one prevails is not decided here. For each thing that grows,
+  Agenor has a primitive that could remove it, and no page applies that primitive to this case. Found
+  by Q5.
 - **Version:** 0.39.0, Redis transport, JDBC directory and presence, the starter in all three roles.
-- **Consumer groups on a topic:** "every `subscribeTopic` creates a new group with a unique
-  subscription id" is documented. The 24-hour run ended with 12 groups on `outcomes` for one living
-  subscriber. `adapters/redis` never mentions removing a group.
-- **Directory rows of killed agents:** a probe gets a new agent id on each start, so a killed probe's
-  row is never overwritten. The run ended with 10 such rows, all `RUNNING`.
-  `adapters/jdbc-directory` says that `getStatus` answers `UNKNOWN` past the staleness window, that
-  "that check happens at read time", and describes nothing that removes a row.
-- **Node streams, reading 1, by the letter: a documentation defect.** `adapters/redis` does describe a
-  cleanup: "A node that never comes back keeps a stream. Nothing expires it; trimming bounds its size,
-  not its existence. `DEL agenor:node:<nodeId>` when you retire an ID for good." So the cleanup exists,
-  and what is missing is the page saying that under the starter every restart retires an id, and how an
-  operator tells which ones are retired. The line reads as a rare, deliberate act.
-- **Node streams, reading 2, in substance: a behavioural defect.** At 189 retired ids a day, a line
-  for an operator's rare act is not a cleanup. The starter generates the ids, offers no property to pin
-  one, and leaves no record of which are finished: a stream's owner is known to be gone only by
-  comparing it with the directory, which itself keeps killed agents as `RUNNING`. Which reading prevails
-  is not decided here.
+- **Corrected:** as first committed, this entry said no page describes a cleanup for consumer groups,
+  and called them and the directory rows framework defects. That was wrong: `messaging` describes
+  `unsubscribe()`, and the entry diary had noted it. The search then covered 2 pages; now it covers
+  all 29 pages reachable from the documentation home that open. Two more linked from it, ADR-032 and
+  ADR-033, answered 404.
+
+| What is left | At the end of the 24-hour run | What the pages offer | Why it does not reach this case |
+|---|---|---|---|
+| Node streams, with their groups | 190 of dead nodes | `adapters/redis`: "`DEL agenor:node:<nodeId>` when you retire an ID for good" | No page says that under the starter every restart retires an id, or how to tell which are retired |
+| Consumer groups on a topic | 12 on `outcomes`, 1 subscriber alive | `messaging`: "Subscriptions are not automatically cleaned up on agent stop — call unsubscribe() in onStop()" | A kill never runs `onStop()`. The alerter subscribes with `@AgenorMessageHandler`, and no page says how such a handler gets its `Subscription`. No page says whether `unsubscribe()` removes the group on Redis |
+| Directory rows of killed agents | 10, all reading `RUNNING` | `directory` lists `AgentRegistry.unregister` | No page connects it to an agent that died. `adapters/jdbc-directory` only says that `getStatus` answers `UNKNOWN` past the staleness window. Not tried here |
+
+- **Reading 1, by the letter: a documentation defect.** Q5's rule makes it a defect of the page if the
+  cleanup exists. A script could call `DEL`, and probably `unregister`, so what is missing is the page
+  that says to, when, and on what.
+- **Reading 2, in substance: a behavioural defect.** At 189 retired ids a day, a line for an operator's
+  rare act is not a cleanup. The starter generates the ids, offers no property to pin one, and keeps
+  no record of which are finished. The only way to find them is to compare streams with the directory,
+  which itself keeps killed agents as `RUNNING`. A process killed cannot clean up after itself, and
+  nothing else in Agenor does it for it.
 - **In memory (CRITERION §5, point 7):** not tried. A process that dies takes an in-memory transport
   and directory with it, so the case should not exist.
 - **Missing capabilities, phrased as CRITERION §5 point 3 asks:** a node that will not return stops
   holding space on the broker; a subscriber that is gone stops holding a group; an agent that died
   without goodbye does not stay in the directory for ever.
+
+## Q8. The application restarts nothing and retries nothing; what it lacks is something to look at
+
+- **Kind:** outcome of a question (CRITERION §4, Q8). No new finding.
+- **What was read:** the 629 lines of the three roles and `sentinel-common`, and `compose.yml`.
+  `scripts/tags` counts **0 lines** tagged `@supervision` (`data/tags/q1-q8-outcomes.csv`). That count
+  was reread by hand for this entry, because a tag nobody wrote also reads 0.
+
+### Each candidate, by the nature of its code
+
+| Element | Why it exists | Nature | Counts for Q8 |
+|---|---|---|---|
+| `restart: unless-stopped` | A dead process comes back | The orchestrator's work | No |
+| `Targets.claimDue` | A target is claimed once per interval, whatever became of the last check | No retry: a timed-out check is not sent again; the next one comes when it is due | No |
+| `CoordinatorAgent.live`, 12 lines | `findByCapability` does not filter by liveness | Agenor already makes this visible, through `getStatus`. Q3's, tagged `@friction Q3` | No |
+| `ownNode()`, the ledger's sender columns, `scripts/reconcile` | CRITERION §4's instrument | Measurement. No role decides anything by them | No |
+| The health component | | Agenor's own, from the starter; no code here | No |
+
+Nothing restarts an agent inside a live process, and nothing was ever wanted to. Each process holds
+one agent, and every fault in this example takes both together. No regime stops an agent and leaves
+its process alive, so this example gives no evidence on that case either way.
+
+### What the application lacks, and has no code for
+
+The example does not work around (CRITERION §5, point 8), so these needs produced findings, not lines:
+
+| | What cannot be seen | Where |
+|---|---|---|
+| The transport is dead and health says `UP` | A node cannot tell an orchestrator its broker is gone | F4, F5 |
+| A poison message lies pending | No signal after the first death | Q6 |
+| Rows of killed agents read `RUNNING` | The stored status is wrong; only `getStatus` weighs it | Q3, F8 |
+| Which streams are finished | Nothing marks them | F8 |
+
+In F4 and F5 the cure is the orchestrator's: a restarted process would read the broker again. What it
+lacks is a reason to restart, and that is a state to be made visible.
+
+### What decides it, and where the criterion pulls two ways
+
+Q8 says the nature of the code decides, not its amount. There is no code, so by the letter nothing
+here is a case of anything: neither supervision nor crash visibility. Yet what the job dispatcher
+asked for, to see what has failed, is the plainest need in the findings above, in a form it did not
+have: not an agent that crashed, but a process that lost its transport and looks well. The rule
+counts code, and CRITERION §5 point 8 forbids writing that code. The two together cannot record this
+case. Which one prevails is not decided here, and CRITERION.md is not changed.
+
+### Against CRITERION §7
+
+- **"No restarting of agents inside a live process": confirmed**, within the limit above.
+- **"A few lines to make an unresponsive probe visible": refuted.** No such lines: JDBC presence makes it
+  visible, and the 12 lines of Q3 only use it.
+- **"Supervision stays closed": confirmed.** Nothing here asks for a restart policy, a backoff or an
+  escalation.
+- **"Crash visibility gets its second case": not by the rule's measure**, which finds no code. In
+  substance, yes, from F4 and F5, as above.
+
+## Q1. A way in with the public documentation alone: yes, with no source reading
+
+- **Kind:** outcome of a question (CRITERION §4, Q1). The account is in `docs/ENTRY-DIARY.md`.
+- **Version:** 0.39.0, from Maven Central.
+- **Source readings: 0**, in the entry and in everything since. Neither the `-sources.jar` nor Agenor's
+  repository was opened. What the pages lacked was found in the Javadoc of the published jars, or by
+  running the application.
+- **Time:** about 35 minutes of recorded time to the first complete round (the diary's stretches 1 to 4).
+  This is not a newcomer's time: see the limits below.
+
+### Where the pages were not enough
+
+| What was needed | Where it was found | Kind |
+|---|---|---|
+| Maven coordinates | Not on the home page; a second page, or a guess | gap |
+| How a scanned agent declares a capability | Javadoc of `@Agent` only | gap |
+| Presence settings | `adapters/jdbc-directory`; `spring-boot-starter` points away | gap |
+| Version overrides on Spring Boot 4.0.9 | The note says up to 4.0.8; the pom on Central shows otherwise | stale page |
+| One agent class in several processes | No page; the Javadoc of `@Agent` warns about one id | gap |
+| A process's own node id | Javadoc of `AgentResolver` | gap |
+| Package scanning in an executable jar | Logs, with health saying `UP` | F1, behavioural |
+| Processes that start together on one database | `adapters/jdbc-directory`, a tip for another case; then a race with no setting | F2, F6 |
+
+### Against CRITERION §7
+
+- **"The way in is `distributed-quick-start`, `spring-boot-starter`, `redis` and `jdbc-directory`":
+  refuted as too few.** The entry also needed `directory`, `messaging`, `agent-development`,
+  `first-agent`, and the Javadoc of five jars.
+- **"At least one source reading will be needed": refuted.** The reading it expected, what happens to
+  the stream of a node that will not come back, was answered by `adapters/redis` and by running it (Q2).
+
+### Limits
+
+- The entry was made by an AI coding assistant, Claude Code, directed by the framework's maintainer, not
+  by a developer working alone. The 35 minutes and the zero source readings are that assistant's, and
+  say nothing about how long a person would take.
+- Whoever enters here is not a stranger to the project: CRITERION §3 summarises the pages beforehand,
+  and it was written by the framework's maintainer. Q1 shows the pages are sufficient, not that they
+  are easy; CRITERION §8 leaves that to someone who did not write the framework.
+- Zero source readings does not mean the pages are complete: several answers came from the Javadoc,
+  and F7 and F8 record what no page says.
+
+## The API census (CRITERION §6): the "before" side
+
+`scripts/api-census 0.39.0` lists the Redis messaging, directory and presence packages as the published
+Javadoc states them: 22 types and 124 members, in `data/api-census/0.39.0.txt`. CRITERION §6 asks for
+this before and after, at the release that closes the example. 0.39.0 is still the latest on Central,
+so there is no "after" yet. This example added nothing to Agenor's API, and any change comes from a
+later release.

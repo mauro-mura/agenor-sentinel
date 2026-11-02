@@ -1,0 +1,84 @@
+#!/usr/bin/env -S python3 -I
+"""Agenor's public API in the Redis messaging, directory and presence packages (CRITERION §6), as
+the Javadoc published on Maven Central states it.
+
+    scripts/api-census 0.39.0 [--out data/api-census/0.39.0.txt]
+
+Reads the -javadoc.jar of each artifact, never a class or a source file: what a reader of the
+documentation can see, in a stable order, so that two versions compare with diff. One line per public
+type, then one per member it declares; what a type inherits is listed under the type that declares
+it. Presence has no package of its own: its types are in the directory packages.
+
+Standard library only; needs access to Maven Central. Nothing is left on disk but the census.
+"""
+
+import argparse
+import html
+import io
+import os
+import re
+import urllib.request
+import zipfile
+
+CENTRAL = "https://repo1.maven.org/maven2/dev/agenor"
+PACKAGES = {
+    "agenor-core": ["dev.agenor.core.directory"],
+    "agenor-runtime": ["dev.agenor.runtime.directory"],
+    "agenor-adapters": ["dev.agenor.adapters.messaging.redis"],
+    "agenor-adapters-persistence": ["dev.agenor.adapters.persistence.directory"],
+}
+TYPE_SIGNATURE = re.compile(r'<div class="type-signature">(.*?)</div>', re.S)
+MEMBER_SIGNATURE = re.compile(r'<div class="member-signature">(.*?)</div>', re.S)
+# Enum constants and record components are members too, under sections of their own.
+DETAILS = re.compile(r'<section class="details"(.*)', re.S)
+
+
+def text(fragment):
+    plain = html.unescape(re.sub(r"<[^>]+>", "", fragment)).replace("\xa0", " ")
+    return " ".join(plain.split())
+
+
+def census(artifact, version, packages):
+    url = f"{CENTRAL}/{artifact}/{version}/{artifact}-{version}-javadoc.jar"
+    with urllib.request.urlopen(url, timeout=60) as response:
+        jar = zipfile.ZipFile(io.BytesIO(response.read()))
+    lines = []
+    for package in packages:
+        folder = package.replace(".", "/") + "/"
+        pages = sorted(n for n in jar.namelist() if folder in n and n.endswith(".html")
+                       and n.split(folder)[1].count("/") == 0 and not n.endswith(("package-summary.html",
+                                                                                 "package-tree.html", "package-use.html")))
+        lines.append(f"package {package} ({artifact})")
+        for page in pages:
+            content = jar.read(page).decode("utf-8", "replace")
+            signature = TYPE_SIGNATURE.search(content)
+            if not signature:
+                continue
+            lines.append("  " + text(signature.group(1)))
+            details = DETAILS.search(content)
+            members = MEMBER_SIGNATURE.findall(details.group(1)) if details else []
+            lines.extend(sorted("    " + text(member) for member in members))
+    return lines
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("version")
+    parser.add_argument("--out", help="data/api-census/<version>.txt by default")
+    args = parser.parse_args()
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    out = args.out or os.path.join(root, "data", "api-census", f"{args.version}.txt")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+
+    lines = [f"Agenor {args.version}: public API, from the published Javadoc"]
+    for artifact, packages in PACKAGES.items():
+        lines.extend(census(artifact, args.version, packages))
+    with open(out, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    types = sum(1 for line in lines if line.startswith("  ") and not line.startswith("    "))
+    members = sum(1 for line in lines if line.startswith("    "))
+    print(f"{out}: {types} types, {members} members")
+
+
+if __name__ == "__main__":
+    main()
