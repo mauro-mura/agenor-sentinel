@@ -1,0 +1,7 @@
+tag,id,file,line,lines
+friction,F1,Dockerfile,6,1
+friction,F4,compose.yml,41,3
+friction,F2,sentinel-alerter/src/main/resources/application.yml,12,3
+friction,Q2,sentinel-common/src/main/java/dev/agenor/sentinel/common/CheckRequest.java,10,2
+friction,Q3,sentinel-coordinator/src/main/java/dev/agenor/sentinel/coordinator/CoordinatorAgent.java,82,12
+friction,F2,sentinel-coordinator/src/main/resources/application.yml,12,3
