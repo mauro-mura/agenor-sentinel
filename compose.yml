@@ -8,6 +8,14 @@
 # runtime treats it as a manual stop and does not restart the container. The init process forwards
 # SIGTERM to the JVM, so an orderly stop (regime 2) is unchanged.
 #
+# That restart policy is the orchestrator of CRITERION §2, and the scripts that run a measurement
+# (scripts/measure, scripts/measure-q6, scripts/long-run, scripts/faults) set it through
+# SENTINEL_RESTART=unless-stopped. Without it the policy is "no", for every service: unless-stopped
+# also brings a container back when the host boots, so a stack left running came back after every
+# reboot, and with Postgres and Valkey on a different policy than the roles, the roles crash-looped
+# on a missing database, one JVM start after another. The measurement scripts also stop the stack
+# when they finish.
+#
 # Host ports are bound to 127.0.0.1 only: Agenor authenticates nothing between nodes
 # (adapters/redis.md, Trust model), so neither backend is exposed beyond this machine.
 
@@ -31,6 +39,7 @@ services:
       interval: 2s
       timeout: 2s
       retries: 30
+    restart: ${SENTINEL_RESTART:-no}
 
   valkey:
     image: docker.io/valkey/valkey:8.1.11-alpine3.24
@@ -51,6 +60,7 @@ services:
       interval: 2s
       timeout: 2s
       retries: 30
+    restart: ${SENTINEL_RESTART:-no}
 
   fixtures:
     build:
@@ -59,7 +69,7 @@ services:
     image: localhost/sentinel-fixtures:dev
     ports:
       - "127.0.0.1:58080:8080"
-    restart: unless-stopped
+    restart: ${SENTINEL_RESTART:-no}
 
   coordinator:
     build:
@@ -74,7 +84,7 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    restart: unless-stopped
+    restart: ${SENTINEL_RESTART:-no}
 
   alerter:
     build:
@@ -91,7 +101,7 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    restart: unless-stopped
+    restart: ${SENTINEL_RESTART:-no}
 
   probe:
     build:
@@ -106,7 +116,7 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    restart: unless-stopped
+    restart: ${SENTINEL_RESTART:-no}
 
 networks:
   default:

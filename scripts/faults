@@ -53,6 +53,10 @@ import subprocess
 import sys
 import time
 
+# The orchestrator's restart policy (CRITERION §2); compose.yml defaults to none. Every compose
+# call must see the same value, or compose would recreate the containers it differs on.
+os.environ["SENTINEL_RESTART"] = "unless-stopped"
+
 LIFECYCLE = re.compile(r"Agent lifecycle: (\S+) STARTING -> RUNNING")
 COLUMNS = ["seed", "n", "regime", "action", "container", "victim_agent_id", "victim_node_id",
            "killed_at", "exit_code", "stop_seconds", "replacement_agent_id", "replacement_node_id",
