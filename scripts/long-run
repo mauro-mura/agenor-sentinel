@@ -50,6 +50,10 @@ import time
 import traceback
 import urllib.request
 
+# The orchestrator's restart policy (CRITERION §2); compose.yml defaults to none. Every compose
+# call must see the same value, or compose would recreate the containers it differs on.
+os.environ["SENTINEL_RESTART"] = "unless-stopped"
+
 ROLES = ["coordinator", "alerter", "probe"]
 
 
@@ -291,6 +295,8 @@ def main():
     run.step("report", "scripts/long-run-report", out, "--snapshot")
     with open(os.path.join(out, "run.txt"), "a") as f:
         f.write(f"finished={iso(utc_now())}\n")
+    # Stopped, not removed: nothing left running comes back when the host boots.
+    run.step("stop", "docker", "compose", "stop")
     run.say(f"finished; results in {out}")
 
 

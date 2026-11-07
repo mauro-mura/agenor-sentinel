@@ -22,6 +22,8 @@
 #
 # Destroys and recreates the compose stack of this repository, volumes included.
 set -eu
+# The orchestrator's restart policy (CRITERION §2); compose.yml defaults to none.
+export SENTINEL_RESTART=unless-stopped
 cd "$(dirname "$0")/.."
 
 REGIME=$1
@@ -85,4 +87,6 @@ for pattern in ' ERROR ' ' WARN ' NOGROUP; do
 done | tee "$OUT/log-counts.txt"
 gzip -9 "$OUT/logs.txt"
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/run.txt"
+# Stopped, not removed: nothing left running comes back when the host boots.
+docker compose stop
 echo "Results in $OUT"
