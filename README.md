@@ -48,6 +48,14 @@ SENTINEL_RESTART=unless-stopped docker compose up -d --build --scale probe=2
 a process that loses the start-up race described in [F6](FINDINGS.md) stays down. Ports are bound
 to `127.0.0.1` only: Agenor does not authenticate nodes to each other.
 
+With Podman behind the `docker` command, `docker compose` reaches Podman through its socket, which
+has to be running and named:
+
+```bash
+systemctl --user start podman.socket
+export DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock
+```
+
 Five targets are configured, all up. Take one down and watch the alert arrive:
 
 ```bash
@@ -57,15 +65,23 @@ curl http://127.0.0.1:58080/webhook            # one JSON line per alert receive
 curl -X POST http://127.0.0.1:58080/control/alpha/up
 ```
 
-`alpha` is checked every 10 s and alerts after 3 failures, so `DOWN` arrives within about 40 s.
-The durable record is the `alert` table (PostgreSQL on `127.0.0.1:55432`, database, user and
-password `sentinel`).
-
-Change the number of probes while it runs, and the coordinator follows:
+`alpha` is checked every 10 s and alerts after 3 failures, so `DOWN` arrives in about 30 s, and
+`UP` within one check of switching it back. The durable record is the `alert` table:
 
 ```bash
-SENTINEL_RESTART=unless-stopped docker compose up -d --scale probe=4
+docker compose exec postgres psql -U sentinel -c 'SELECT * FROM alert'
 ```
+
+Change the number of probes while it runs, and the coordinator starts handing work to the new ones
+within a round:
+
+```bash
+SENTINEL_RESTART=unless-stopped docker compose scale probe=4
+```
+
+`scale`, not `up --scale`: Valkey has a fixed address (F4), and on Podman with docker-compose 1.29
+`up` then refuses to touch the network of a running stack. Compose prints that `scale` is
+deprecated; it still works.
 
 Stop everything with `docker compose down`.
 
