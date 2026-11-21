@@ -114,8 +114,9 @@ Each script describes its own options at the top of the file.
 
 ## What it found
 
-All on Agenor 0.39.0. [`FINDINGS.md`](FINDINGS.md) gives the evidence and the reasoning for each
-entry, and what it means for each question.
+All on Agenor 0.39.0; [Status](#status) says which ones later releases changed.
+[`FINDINGS.md`](FINDINGS.md) gives the evidence and the reasoning for each entry, and what it
+means for each question.
 
 | | Finding | Kind |
 |---|---|---|
@@ -139,9 +140,30 @@ death it lies pending where nobody reads it (Q6).
 
 ## Status
 
-All eight questions have a written outcome, and the 24-hour run has gone to the end on a release
-from Maven Central. The "after" side of the API census that `CRITERION.md` §6 asks for waits for
-the release that closes the example.
+**Finished, and kept at Agenor 0.39.0 as the record of that run.** All eight questions have a
+written outcome and the 24-hour run went to the end on a release from Maven Central, which is
+when `CRITERION.md` §8 says the example closes. The application will not move to a later release,
+so the "after" side of the API census that §6 asks for will not be taken. The repository is
+archived.
+
+### What later releases changed
+
+The findings describe 0.39.0, and some of them no longer hold. Checked against Agenor's changelog
+and documentation as released in 0.41.0:
+
+| | Finding | Since 0.39.0 |
+|---|---|---|
+| F1 | Package scanning in an executable jar | Fixed in 0.40.0 |
+| F2 | The application's own Flyway after another process | Open: the starter page still says `spring.flyway.*` needs no setting for Agenor |
+| F3 | An orderly stop drops the reply | Fixed in 0.41.0: a dialogue handler still running at an orderly stop sends its reply |
+| F4 | A broker at a new address | Fixed in 0.40.0: the client follows the new address, and health answers `DOWN` while the broker cannot be reached |
+| F5 | A broker that comes back empty | Fixed in 0.40.0: a consumer loop recreates the consumer group the broker lost |
+| F6 | Processes migrating an empty database together | Open: the migration is unchanged, and no page mentions concurrent starts |
+| F7 | Where a reply goes when its requester died | Addressed in 0.41.0: the starter page says what a restart leaves in the node's stream, `agenor.messaging.redis.node-id` lets the next start read it, and a reply to a conversation the agent no longer holds opens none |
+| F8 | What a restart leaves behind | In part, in 0.41.0: with `node-id` set, a restart no longer leaves a new stream. Topic consumer groups and directory rows of killed agents are unchanged |
+
+Nothing here was re-run on those releases: each verdict is read from what Agenor published, not
+measured by this application.
 
 ## Limits
 
